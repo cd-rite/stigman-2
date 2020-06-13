@@ -975,12 +975,7 @@ function addReview(leaf, selectedRule, selectedResource) {
         sortable: true,
         align: 'left',
         renderer: function (value, metaData, record, rowIndex, colIndex, store) {
-          var iconPath;
-          if (record.data.assetGroup == TEMPLATE_STR) {
-            metaData.css += ' sm-cell-template';
-          } else {
-            metaData.css += ' sm-cell-asset';
-          }
+          metaData.css += ' sm-cell-asset';
           return value;
         }
       },
@@ -1930,7 +1925,7 @@ function addReview(leaf, selectedRule, selectedResource) {
     id: 'reviewTab' + idAppend,
     iconCls: 'sm-stig-icon',
     //title: '<img src=/icons/security_firewall_on.png height=12 width=12> ' + leaf.stigName + ' (' + leaf.assetName + ')',
-    title: leaf.assetName + " : " + leaf.stigName,
+    title: `${leaf.packageName} : ${leaf.assetName} : ${leaf.stigName}`,
     closable: true,
     layout: 'border',
     sm_TabType: 'asset_review',
