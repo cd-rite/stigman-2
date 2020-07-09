@@ -22,3 +22,4 @@ jobs:
           repository: muerte99/stigman
           dockerfile: Dockerfile
           tag_with_ref: true
+          key:  
