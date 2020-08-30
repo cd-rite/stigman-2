@@ -1,8 +1,12 @@
 Ext.ns('STIGMAN')
 
 STIGMAN.Env = {
+    version: '1.0.0-beta',
     apiBase: "/api" || "../api",
-    commitBranch: "" || "unknown",
-    commitSha: "" || "unknown",
-    commitTag: "" || "unknown"
+    commit: {
+        branch: "" || "na",
+        sha: "" || "na",
+        tag: "" || "na",
+        describe: "" || "na"
+    }
 }

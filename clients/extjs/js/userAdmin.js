@@ -1,16 +1,8 @@
-// ======================================================================================
-// NAME: 		userAdmin.js
-// CREATED: 	January 6, 2017 @ 14:12 
-// UPDATED: 	January 11, 2017 @ 14:07 
-// AUTHOR(S):	BRANDON MASSEY
-// PURPOSE: 	Responsible for building the User Management Listing interface
-// =======================================================================================
-
 function addUserAdmin() {
 
-	var userFields = Ext.data.Record.create([
+	const userFields = Ext.data.Record.create([
 		{	name:'userId',
-			type: 'integer'
+			type: 'string'
 		},{
 			name:'username',
 			type: 'string'
@@ -19,20 +11,37 @@ function addUserAdmin() {
 			type: 'string'
 		},{
 			name: 'globalAccess',
-			type: 'boolean'
+			type: 'boolean',
+			mapping: 'privileges.globalAccess'
 		},{
 			name: 'canCreateCollection',
-			type: 'boolean'
+			type: 'boolean',
+			mapping: 'privileges.canCreateCollection'
 		},{
 			name: 'canAdmin',
-			type: 'boolean'
+			type: 'boolean',
+			mapping: 'privileges.canAdmin'
 		},{
 			name: 'metadata'
-		}
-	]);
-
-	var userStore = new Ext.data.JsonStore({
-		url: `${STIGMAN.Env.apiBase}/users${curUser.privileges.canAdmin ? '?elevate=true' : ''}`,
+		},{
+			name: 'created',
+			type: 'date',
+			mapping: 'statistics.created'
+		},{
+			name: 'lastAccess',
+			type: 'integer',
+			mapping: 'statistics.lastAccess'
+		},
+	])
+	const userStore = new Ext.data.JsonStore({
+		proxy: new Ext.data.HttpProxy({
+			url: `${STIGMAN.Env.apiBase}/users`,
+			method: 'GET'
+		}),
+		baseParams: {
+			elevate: curUser.privileges.canAdmin,
+			projection: ['privileges', 'statistics']
+		},
 		root: '',
 		fields: userFields,
 		isLoaded: false, // custom property
@@ -51,22 +60,21 @@ function addUserAdmin() {
 				Ext.getCmp('userGrid-totalText').setText(store.getCount() + ' records');
 			}
 		}
-	});
+	})
 
-	var userGrid = new Ext.grid.EditorGridPanel({
-		// region: 'west',
-		// split: true,
-		//title: 'User Management',
+	const userGrid = new Ext.grid.GridPanel({
+		cls: 'sm-round-panel',
+		margins: { top: SM.Margin.top, right: SM.Margin.edge, bottom: SM.Margin.bottom, left: SM.Margin.edge },
+    	region: 'center',
 		id: 'userGrid',
 		store: userStore,
-		border: false,
+		border: true,
 		stripeRows:true,
 		sm: new Ext.grid.RowSelectionModel({ singleSelect: true }),
 		columns: [
 			{
-				id:'cn',
-				header: "Account Name", 
-				width: 250,
+				header: "Username", 
+				width: 150,
 				dataIndex: 'username',
 				sortable: true
 			},
@@ -77,25 +85,55 @@ function addUserAdmin() {
 				sortable: true
 			},
 			{ 	
-				header: "Access Level",
+				xtype: 'booleancolumn',
+				header: "Create Collection",
 				width: 150,
-				dataIndex: 'accessLevel',
-				sortable: true
+				align: 'center',
+				dataIndex: 'canCreateCollection',
+				sortable: true,
+				trueText: '&#x2714;',
+				falseText: ''
 			},
 			{ 	
-				header: "Department",
+				xtype: 'booleancolumn',
+				header: "Global Access",
 				width: 150,
-				dataIndex: 'dept.name',
-				sortable: true
+				align: 'center',
+				dataIndex: 'globalAccess',
+				sortable: true,
+				trueText: '&#x2714;',
+				falseText: ''
 			},
 			{ 	
-				header: "Admin?",
+				xtype: 'booleancolumn',
+				header: "Administrator",
 				width: 150,
+				align: 'center',
 				dataIndex: 'canAdmin',
 				sortable: true,
-				renderer: function (val) {
-					return val ? "Yes" : "No"
-				}
+				trueText: '&#x2714;',
+				falseText: ''
+			},
+			{ 	
+				header: "Added",
+				xtype: 'datecolumn',
+				format: 'Y-m-d H:i T',
+				width: 150,
+				dataIndex: 'created',
+				sortable: true
+			},
+			{ 	
+				header: "Last Access",
+				width: 150,
+				dataIndex: 'lastAccess',
+				sortable: true,
+				renderer: v => v ? Ext.util.Format.date(new Date(v * 1000), 'Y-m-d H:i T') : SM.styledEmptyRenderer()
+			},
+			{
+				header: "userId", 
+				width: 150,
+				dataIndex: 'userId',
+				sortable: true
 			}
 		],
 		view: new Ext.grid.GridView({
@@ -119,7 +157,7 @@ function addUserAdmin() {
 				fn: function(grid,rowIndex,e) {
 					var r = grid.getStore().getAt(rowIndex);
 					Ext.getBody().mask('Getting properties of ' + r.get('display') + '...');
-					showUserProperties(r.get('userId'), userGrid);
+					showUserProps(r.get('userId'));
 				}
 			}
 		},
@@ -129,7 +167,7 @@ function addUserAdmin() {
 			disabled: !(curUser.privileges.canAdmin),
 			handler: function() {
 				Ext.getBody().mask('Loading form...');
-				showUserProperties(0, userGrid);            
+				showUserProps(0);            
 			}
 		},'-', {
 			ref: '../removeBtn',
@@ -163,7 +201,7 @@ function addUserAdmin() {
 			handler: function() {
 				var r = userGrid.getSelectionModel().getSelected();
 				Ext.getBody().mask('Getting properties of ' + r.get('name') + '...');
-				showUserProperties(r.get('userId'), userGrid);
+				showUserProps(r.get('userId'));
 			}
 		}],
 		bbar: new Ext.Toolbar({
@@ -181,7 +219,7 @@ function addUserAdmin() {
 			},{
 				xtype: 'tbbutton',
 				id: 'userGrid-csvBtn',
-				iconCls: 'icon-save',
+				iconCls: 'sm-export-icon',
 				tooltip: 'Download this table\'s data as Comma Separated Values (CSV)',
 				width: 20,
 				handler: function(btn){
@@ -202,29 +240,21 @@ function addUserAdmin() {
 		}),
 		width: '50%',
 		loadMask: true
-	});
+	})
 
 		
 
-	var thisTab = Ext.getCmp('reviews-center-tab').add({
+	const thisTab = Ext.getCmp('main-tab-panel').add({
 		id: 'user-admin-tab',
 		iconCls: 'sm-users-icon',
 		title: 'Users',
 		closable:true,
-		layout: 'fit',
+		layout: 'border',
+		border: false,
 		items: [userGrid]
-	});
-	if (!curUser.privileges.canAdmin) { // only show the modify button for non-admins
-		var tb = userGrid.getTopToolbar();
-		var items = tb.find();
-		for (var x=0;x<items.length;x++) {
-			if (items[x].text != 'View/Edit User Properties') {
-				items[x].hide();
-			}
-		}
-	}
-	thisTab.show();
+	})
+	thisTab.show()
 	
-	userGrid.getStore().load();
-} // end: function addUserAdmin()
+	userGrid.getStore().load()
+}
 

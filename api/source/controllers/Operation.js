@@ -12,8 +12,9 @@ const JSZip = require("jszip");
 module.exports.getConfiguration = async function getConfiguration (req, res, next) {
   try {
     let dbConfigs = await Operation.getConfiguration()
-    let apiVersion = {apiVersion: config.apiVersion}
-    let response = { ...apiVersion, ...dbConfigs }
+    let version = {version: config.version}
+    let commit = {commit: config.commit}
+    let response = { ...version, ...commit, ...dbConfigs }
     writer.writeJson(res, response)
   }
   catch(err) {
@@ -108,8 +109,6 @@ module.exports.replaceAppData = async function replaceAppData (req, res, next) {
       }
       let options = []
       let response = await Operation.replaceAppData(options, appdata, req.userObject, res )
-      // writer.writeJson(res, response)
-      fs.unlink(req.file.path)
     }
     else {
       writer.writeJson(res, writer.respondWithCode ( 403, {message: `User has insufficient privilege to complete this request.`} ) )

@@ -17,15 +17,15 @@ exports.queryCollections = async function (inProjection = [], inPredicates = {},
     }
 
     let columns = [
-      'CAST(p.collectionId as char) as collectionId',
-      'p.name',
-      'p.workflow',
-      'p.metadata'
+      'CAST(c.collectionId as char) as collectionId',
+      'c.name',
+      'c.workflow',
+      'c.metadata'
     ]
     let joins = [
-      'collection p',
-      'left join collection_grant pg on p.collectionId = pg.collectionId',
-      'left join asset a on p.collectionId = a.collectionId',
+      'collection c',
+      'left join collection_grant cg on c.collectionId = cg.collectionId',
+      'left join asset a on c.collectionId = a.collectionId',
       'left join stig_asset_map sa on a.assetId = sa.assetId'
     ]
 
@@ -78,10 +78,48 @@ exports.queryCollections = async function (inProjection = [], inPredicates = {},
               'accessLevel', accessLevel
             )
           )
-          from collection_grant left join user_data using (userId) where collectionId = p.collectionId)
+          from collection_grant left join user_data using (userId) where collectionId = c.collectionId)
         ,  json_array()
         )
       ) as "grants"`)
+    }
+    if (inProjection.includes('owners')) {
+      columns.push(`(select
+        coalesce(
+          (select json_arrayagg(
+            json_object(
+              'userId', CAST(user_data.userId as char),
+              'username', user_data.username
+            )
+          )
+          from collection_grant left join user_data using (userId)
+          where collectionId = c.collectionId and accessLevel = 4)
+        ,  json_array()
+        )
+      ) as "owners"`)
+    }
+    if (inProjection.includes('statistics')) {
+      if (context == dbUtils.CONTEXT_USER) {
+        joins.push('left join collection_grant cgstat on c.collectionId = cgstat.collectionId')
+        columns.push(`(select
+          json_object(
+            'created', c.created,
+            'grantCount', CASE WHEN cg.accessLevel = 1 THEN 1 ELSE COUNT( distinct cgstat.cgId ) END,
+            'assetCount', COUNT( distinct a.assetId ),
+            'checklistCount', COUNT( distinct sa.saId )
+          )
+        ) as "statistics"`)
+      }
+      else {
+        columns.push(`(select
+          json_object(
+            'created', c.created,
+            'grantCount', COUNT( distinct cg.cgId ),
+            'assetCount', COUNT( distinct a.assetId ),
+            'checklistCount', COUNT( distinct sa.saId )
+          )
+        ) as "statistics"`)
+      }
     }
 
     // PREDICATES
@@ -90,27 +128,27 @@ exports.queryCollections = async function (inProjection = [], inPredicates = {},
       binds: []
     }
     if ( inPredicates.collectionId ) {
-      predicates.statements.push('p.collectionId = ?')
+      predicates.statements.push('c.collectionId = ?')
       predicates.binds.push( inPredicates.collectionId )
     }
     if ( inPredicates.name ) {
-      predicates.statements.push('p.name LIKE ?')
+      predicates.statements.push('c.name LIKE ?')
       predicates.binds.push( `%${inPredicates.name}%` )
     }
     if ( inPredicates.workflow ) {
-      predicates.statements.push('p.workflow = ?')
+      predicates.statements.push('c.workflow = ?')
       predicates.binds.push( inPredicates.workflow )
     }
     if ( inPredicates.metadata ) {
       for (const pair of inPredicates.metadata) {
         const [key, value] = pair.split(':')
-        predicates.statements.push('JSON_CONTAINS(p.metadata, ?, ?)')
+        predicates.statements.push('JSON_CONTAINS(c.metadata, ?, ?)')
         predicates.binds.push( `"${value}"`,  `$.${key}`)
       }
     }
     if (context == dbUtils.CONTEXT_USER) {
       joins.push('left join user_stig_asset_map usa on sa.saId = usa.saId')
-      predicates.statements.push('(pg.userId = ? AND CASE WHEN pg.accessLevel = 1 THEN usa.userId = pg.userId ELSE TRUE END)')
+      predicates.statements.push('(cg.userId = ? AND CASE WHEN cg.accessLevel = 1 THEN usa.userId = cg.userId ELSE TRUE END)')
       predicates.binds.push( userObject.userId, userObject.userId )
     }
 
@@ -122,8 +160,8 @@ exports.queryCollections = async function (inProjection = [], inPredicates = {},
     if (predicates.statements.length > 0) {
       sql += "\nWHERE " + predicates.statements.join(" and ")
     }
-    sql += ' group by p.collectionId, p.name, p.workflow, p.metadata'
-    sql += ' order by p.name'
+    sql += ' group by c.collectionId, c.name, c.workflow, c.metadata'
+    sql += ' order by c.name'
     
     let [rows] = await dbUtils.pool.query(sql, predicates.binds)
     return (rows)
@@ -170,7 +208,7 @@ exports.queryFindings = async function (aggregator, inProjection = [], inPredica
           'g.title',
           'g.severity'
         ]
-        orderBy = 'substring(rg.groupId from 3) + 0'
+        orderBy = 'substring(g.groupId from 3) + 0'
         break
       case 'cci':
         columns = [
@@ -193,12 +231,10 @@ exports.queryFindings = async function (aggregator, inProjection = [], inPredica
       'left join asset a on c.collectionId = a.collectionId',
       'inner join stig_asset_map sa on a.assetId = sa.assetId',
       'left join user_stig_asset_map usa on sa.saId = usa.saId',
-      'inner join current_rev cr on sa.benchmarkId = cr.benchmarkId',
-      'inner join rev_group_map rg on cr.revId = rg.revId',
-      'inner join `group` g on rg.groupId = g.groupId',
-      'inner join rev_group_rule_map rgr on rg.rgId = rgr.rgId',
-      'inner join rule ru on rgr.ruleId = ru.ruleId',
-      'inner join review rv on (ru.ruleId = rv.ruleId and a.assetId = rv.assetId and rv.resultId = 4)',
+      'inner join current_group_rule cgr on sa.benchmarkId = cgr.benchmarkId',
+      'inner join review rv on (cgr.ruleId = rv.ruleId and a.assetId = rv.assetId and rv.resultId = 4)',
+      'inner join `group` g on cgr.groupId = g.groupId',
+      'inner join rule ru on rv.ruleId = ru.ruleId',
       'left join rule_cci_map rulecci on ru.ruleId = rulecci.ruleId',
       'left join cci on rulecci.cci = cci.cci'
     ]
@@ -218,17 +254,77 @@ exports.queryFindings = async function (aggregator, inProjection = [], inPredica
     }
     if (inProjection.includes('assets')) {
       columns.push(`cast(concat('[', group_concat(distinct json_object (
-        'assetId', a.assetId,
+        'assetId', CAST(a.assetId as char),
         'name', a.name) order by a.name), ']') as json) as "assets"`)
     }
     if (inProjection.includes('stigs')) {
-      columns.push(`cast( concat( '[', group_concat(distinct concat('"',cr.benchmarkId,'"')), ']' ) as json ) as "stigs"`)
+      columns.push(`cast( concat( '[', group_concat(distinct concat('"',cgr.benchmarkId,'"')), ']' ) as json ) as "stigs"`)
     }
     if (inProjection.includes('ccis')) {
       columns.push(`cast(concat('[', group_concat(distinct json_object (
         'cci', rulecci.cci,
         'definition', cci.definition,
         'apAcronym', cci.apAcronym) order by rulecci.cci), ']') as json) as "ccis"`)
+    }
+    if (inProjection.includes('poamRarSummary')) {
+      joins.push('left join severity_cat_map sc on g.severity = sc.severity')
+      joins.push('left join poam_rar_entry pre on (c.collectionId = pre.collectionId and g.groupId = pre.groupId)')
+      groupBy.push(`
+        pre.status,
+        pre.iaControl,
+        pre.compDate,
+        pre.milestone,
+        pre.residualRisk,
+        sc.cat,
+        pre.mitDesc,
+        pre.likelihood,
+        pre.remDesc,
+        pre.rarComment
+      `)
+      const poamComplete = `
+        CASE WHEN pre.status is not null
+          AND pre.iaControl is not null
+          AND pre.compDate is not null
+          AND pre.milestone is not null
+        THEN
+          CASE WHEN pre.status = 'Ongoing'
+          THEN -- The status is 'Ongoing'
+            CASE WHEN pre.residualRisk is not null
+            THEN -- Residual Risk value exists
+              CASE WHEN pre.residualRisk > sc.cat
+              THEN -- Finding has been mitigated 
+                CASE WHEN pre.mitDesc is not null
+                THEN 1 -- Have mitigation desc, the POAM entry is complete
+                ELSE 0 END -- No mitigation desc, the POAM entry is not complete
+              ELSE 1 END -- Finding non-mitigated, the POAM entry is complete
+            ELSE 0 END -- No residual risk, the POAM entry is not complete
+          ELSE 1 END -- Status other than "Ongoing", the POAM entry is complete
+        ELSE 0 -- The POAM entry is not complete
+        END`
+      const rarComplete = `
+        CASE WHEN pre.status = 'Ongoing'
+        THEN
+          -- The status is 'Ongoing'
+          CASE WHEN pre.iaControl is not null
+            AND pre.likelihood is not null
+            AND pre.mitDesc is not null
+            AND pre.residualRisk is not null
+            AND pre.remDesc is not null
+          THEN 1 -- The RAR entry is complete
+          ELSE 0 END -- The RAR entry is not complete
+        ELSE
+          -- The status other than 'Ongoing'
+          CASE WHEN pre.status is not null
+            AND pre.iaControl is not null
+            AND pre.rarComment is not null
+          THEN 1 -- The RAR entry is complete
+          ELSE 0 END -- The RAR entry is not complete
+        END`
+      columns.push(`json_object(
+        "poamComplete", cast(${poamComplete} is true as json),
+        "rarComplete", cast(${rarComplete} is true as json),
+        "status", pre.status) as poamRarSummary`)
+
     }
 
     // PREDICATES
@@ -237,6 +333,7 @@ exports.queryFindings = async function (aggregator, inProjection = [], inPredica
       binds: []
     }
     
+    // collectionId predicate is mandatory per API spec
     if ( inPredicates.collectionId ) {
       predicates.statements.push('c.collectionId = ?')
       predicates.binds.push( inPredicates.collectionId )
@@ -250,7 +347,7 @@ exports.queryFindings = async function (aggregator, inProjection = [], inPredica
       predicates.binds.push( 3 )
     }
     if ( inPredicates.benchmarkId ) {
-      predicates.statements.push('cr.benchmarkId = ?')
+      predicates.statements.push('cgr.benchmarkId = ?')
       predicates.binds.push( inPredicates.benchmarkId )
     }
     if (context == dbUtils.CONTEXT_USER) {
@@ -277,6 +374,195 @@ exports.queryFindings = async function (aggregator, inProjection = [], inPredica
   // finally {
 
   // }
+}
+
+exports.queryStatus = async function (inPredicates = {}, userObject) {
+  try {
+    let context
+    if (userObject.privileges.globalAccess) {
+      context = dbUtils.CONTEXT_ALL
+    } else {
+      context = dbUtils.CONTEXT_USER
+    }
+
+    let columns = [
+      `distinct cast(a.assetId as char) as assetId`,
+      'a.name as assetName',
+      'sas.benchmarkId',
+      `json_object(
+        'total', cr.ruleCount,
+        'auto', cr.ovalCount
+      ) as rules`,
+      'sas.minTs',
+      'sas.maxTs',
+      `json_object(
+        'low', sas.lowCount,
+          'medium', sas.mediumCount,
+          'high', sas.highCount
+      ) as findings`,
+     `json_object(
+        'saved', json_object(
+          'total', sas.savedManual + sas.savedAuto,
+              'auto', sas.savedAuto),
+        'submitted', json_object(
+           'total', sas.submittedManual + sas.submittedAuto,
+              'auto', sas.submittedAuto),
+        'rejected', json_object(
+           'total', sas.rejectedManual + sas.rejectedAuto,
+              'auto', sas.rejectedAuto),
+        'accepted', json_object(
+           'total', sas.acceptedManual + sas.acceptedAuto,
+              'auto', sas.acceptedAuto)
+      ) as status`           
+    ]
+    let joins = [
+      'collection c',
+      'left join collection_grant cg on c.collectionId = cg.collectionId',
+      'left join asset a on c.collectionId = a.collectionId',
+      'inner join stig_asset_map sa on a.assetId = sa.assetId',
+      'left join user_stig_asset_map usa on sa.saId = usa.saId',
+      'left join stats_asset_stig sas on (sa.assetId = sas.assetId and sa.benchmarkId = sas.benchmarkId)',
+      'left join current_rev cr on sas.benchmarkId = cr.benchmarkId',
+    ]
+
+    // PROJECTIONS
+
+    // PREDICATES
+    let predicates = {
+      statements: [],
+      binds: []
+    }
+    
+    // collectionId predicate is mandatory per API spec
+    if ( inPredicates.collectionId ) {
+      predicates.statements.push('c.collectionId = ?')
+      predicates.binds.push( inPredicates.collectionId )
+    }
+    if (context == dbUtils.CONTEXT_USER) {
+      predicates.statements.push('(cg.userId = ? AND CASE WHEN cg.accessLevel = 1 THEN usa.userId = cg.userId ELSE TRUE END)')
+      predicates.binds.push( userObject.userId, userObject.userId )
+    }
+    // CONSTRUCT MAIN QUERY
+    let sql = 'SELECT '
+    sql+= columns.join(",\n")
+    sql += '\nFROM '
+    sql+= joins.join(" \n")
+    if (predicates.statements.length > 0) {
+      sql += "\nWHERE " + predicates.statements.join(" and ")
+    }
+    sql += '\norder by a.name, sas.benchmarkId'
+    
+    let [rows] = await dbUtils.pool.query(sql, predicates.binds)
+    return (rows)
+  }
+  catch (err) {
+    throw err
+  }
+}
+
+exports.queryStigAssets = async function (inProjection = [], inPredicates = {}, elevate = false, userObject) {
+  try {
+    let columns = [
+      'sa.benchmarkId',
+      `json_object(
+        'assetId', CAST(a.assetId as char),
+        'name', a.name
+      ) as asset`
+    ]
+    let joins = [
+      'collection c',
+      'left join asset a on c.collectionId = a.collectionId',
+      'left join stig_asset_map sa on a.assetId = sa.assetId',
+    ]
+    // PREDICATES
+    let predicates = {
+      statements: [],
+      binds: []
+    }
+    if ( inPredicates.collectionId ) {
+      predicates.statements.push('c.collectionId = ?')
+      predicates.binds.push( inPredicates.collectionId )
+    } else {
+      throw ('Missing required predicate: collectionId')
+    }
+    if ( inPredicates.userId ) {
+      joins.push('left join user_stig_asset_map usa on sa.saId = usa.saId')
+      predicates.statements.push('usa.userId = ?')
+      predicates.binds.push( inPredicates.userId )
+    }
+
+    // CONSTRUCT MAIN QUERY
+    let sql = 'SELECT '
+    sql+= columns.join(",\n")
+    sql += ' FROM '
+    sql+= joins.join(" \n")
+    if (predicates.statements.length > 0) {
+      sql += "\nWHERE " + predicates.statements.join(" and ")
+    }
+    sql += ' order by sa.benchmarkId, a.name'
+    
+    let [rows] = await dbUtils.pool.query(sql, predicates.binds)
+    return (rows)
+
+  }
+  catch (err) {
+    throw err
+  }
+}
+
+exports.updateOrReplaceUserStigAssets = async function(writeAction, collectionId, userId, stigAssets, projection, userObject) {
+  let connection // available to try, catch, and finally blocks
+  let hrstart, hrend
+  try {
+    // Connect to MySQL
+    connection = await dbUtils.pool.getConnection()
+    connection.config.namedPlaceholders = true
+    await connection.query('START TRANSACTION');
+    if (writeAction === dbUtils.WRITE_ACTION.REPLACE) {
+      const sqlDelete = `DELETE FROM 
+        user_stig_asset_map
+      WHERE
+        userId = ?
+        and saId IN (
+          SELECT saId from stig_asset_map left join asset using (assetId) where asset.collectionId = ?
+        )`
+        hrstart = process.hrtime()        
+        await connection.execute(sqlDelete, [userId, collectionId])
+        hrend = process.hrtime(hrstart)
+        console.log(`delete: ${hrend[0]}s  ${hrend[1] / 1000000}ms`)
+
+    }
+    if (stigAssets.length > 0) {
+      // Get saIds
+      const bindsInsertSaIds = [ userId ]
+      const predicatesInsertSaIds = []
+      for (const stigAsset of stigAssets) {
+        bindsInsertSaIds.push(stigAsset.benchmarkId, stigAsset.assetId)
+        predicatesInsertSaIds.push('(benchmarkId = ? AND assetId = ?)')
+      }
+      let sqlInsertSaIds = `INSERT IGNORE INTO user_stig_asset_map (userId, saId) SELECT ?, saId FROM stig_asset_map WHERE `
+      sqlInsertSaIds += predicatesInsertSaIds.join('\nOR\n')
+      hrstart = process.hrtime()        
+      let [result] = await connection.execute(sqlInsertSaIds, bindsInsertSaIds)
+      hrend = process.hrtime(hrstart)
+      console.log(`insert: ${hrend[0]}s  ${hrend[1] / 1000000}ms`)
+    }
+    hrstart = process.hrtime()        
+    await connection.commit()
+    hrend = process.hrtime(hrstart)
+    console.log(`commit: ${hrend[0]}s  ${hrend[1] / 1000000}ms`)
+  }
+  catch (err) {
+    if (typeof connection !== 'undefined') {
+      await connection.rollback()
+    }
+    throw err
+  }
+  finally {
+    if (typeof connection !== 'undefined') {
+      await connection.release()
+    }
+  }
 }
 
 exports.addOrUpdateCollection = async function(writeAction, collectionId, body, projection, userObject) {
@@ -420,7 +706,7 @@ exports.getChecklistByCollectionStig = async function (collectionId, benchmarkId
       'left join `group` g on rg.groupId=g.groupId',
       'left join rev_group_rule_map rgr on rg.rgId=rgr.rgId',
       'left join rule rules on rgr.ruleId=rules.ruleId',
-      'left join (select distinct ruleId from rule_oval_map) scap on rgr.ruleId=scap.ruleId',
+      'left join rule_oval_map scap on rgr.ruleId=scap.ruleId',
       'left join review r on (rgr.ruleId=r.ruleId and sa.assetId=r.assetId)'
     ]
 
@@ -447,7 +733,7 @@ exports.getChecklistByCollectionStig = async function (collectionId, benchmarkId
 
     // Access control
     if (!userObject.privileges.globalAccess) {
-      const collectionGrant = req.userObject.collectionGrants.find( g => g.collectionId === collectionId )
+      const collectionGrant = userObject.collectionGrants.find( g => g.collectionId === collectionId )
       if (collectionGrant && collectionGrant.accessLevel === 1) {
         predicates.statements.push(`a.assetId in (
           select
@@ -493,11 +779,20 @@ exports.getChecklistByCollectionStig = async function (collectionId, benchmarkId
           ,g.title as groupTitle
           ,r.resultId
           ,r.statusId
-          ,CASE WHEN scap.ruleId is null THEN 0 ELSE 1 END as "autoCheckAvailable"
+          ,CASE WHEN COUNT(scap.ruleId) = 0 THEN 0 ELSE 1 END as "autoCheckAvailable"
         from
           ${joins.join('\n')}
         where
           ${predicates.statements.join(' and ')}
+        group by
+          a.assetId
+          ,rgr.ruleId
+          ,rules.title
+          ,rules.severity
+          ,rg.groupId
+          ,g.title
+          ,r.resultId
+          ,r.statusId          
         ) r
       group by
         r.ruleId
@@ -579,6 +874,29 @@ exports.getFindingsByCollection = async function( collectionId, aggregator, benc
 
 }
 
+exports.getStatusByCollection = async function( collectionId, userObject ) {
+  try {
+    let rows = await _this.queryStatus({ collectionId: collectionId }, userObject)
+    return (rows)
+  }
+  catch (err) {
+    throw ( writer.respondWithCode ( 500, {message: err.message,stack: err.stack} ) )
+  }
+}
+
+exports.geStigAssetsByCollectionUser = async function (collectionId, userId, elevate, userObject) {
+  try {
+    let rows = await _this.queryStigAssets([], { 
+      collectionId: collectionId,
+      userId: userId
+    }, elevate, userObject)
+    return (rows)
+  }
+  catch (err) {
+    throw ( writer.respondWithCode ( 500, {message: err.message,stack: err.stack} ) )
+  }
+
+}
 
 exports.getStigsByCollection = async function( collectionId, elevate, userObject ) {
   try {
@@ -608,6 +926,15 @@ exports.replaceCollection = async function( collectionId, body, projection, user
   }
 }
 
+exports.setStigAssetsByCollectionUser = async function (collectionId, userId, stigAssets, userObject) {
+  try {
+    let row = await _this.updateOrReplaceUserStigAssets(dbUtils.WRITE_ACTION.REPLACE, collectionId, userId, stigAssets, userObject)
+    return (row)
+  } 
+  catch (err) {
+    throw ( writer.respondWithCode ( 500, {message: err.message,stack: err.stack} ) )
+  }
+}
 
 /**
  * Merge updates to a Collection

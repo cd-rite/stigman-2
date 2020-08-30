@@ -1,6 +1,15 @@
 Ext.ns('SM')
+let doWoWindow
 
-SM.NodeSorter = (a, b) => a.text < b.text ? -1 : 1
+SM.NodeSorter = (a, b) => {
+  if (a.sortToTop) {
+    return -1
+  }
+  if (b.sortToTop) {
+    return 1
+  }
+  return a.text.toUpperCase() < b.text.toUpperCase() ? -1 : 1
+}
 
 SM.CollectionNodeConfig = function (collection) {
   const onAssetChanged = async (node, apiAsset) => {
@@ -109,11 +118,20 @@ SM.CollectionNodeConfig = function (collection) {
   }
 
   let children = []
-  collectionGrant = curUser.collectionGrants.find( g => g.collection.collectionId === collection.collectionId )
+  let reports = [ {
+    id: `${collection.collectionId}-findings-node`,
+    text: 'Findings',
+    collectionId: collection.collectionId,
+    collectionName: collection.name,
+    iconCls: 'sm-report-icon',
+    action: 'findings',
+    leaf: true
+  }]
+  const collectionGrant = curUser.collectionGrants.find( g => g.collection.collectionId === collection.collectionId )
   if (collectionGrant && collectionGrant.accessLevel >= 3) {
     children.push({
       id: `${collection.collectionId}-pkgconfig-node`,
-      text: 'Configuration',
+      text: 'Manage',
       collectionId: collection.collectionId,
       collectionName: collection.name,
       action: 'collection-management',
@@ -121,15 +139,26 @@ SM.CollectionNodeConfig = function (collection) {
       leaf: true
     })
   }
-  children.push(
-    {
-      id: `${collection.collectionId}-findings-node`,
-      text: 'Findings',
+  // if (collectionGrant && collectionGrant.accessLevel >= 2) {
+    reports.push({
+      id: `${collection.collectionId}-findings-status-node`,
+      text: 'Status',
       collectionId: collection.collectionId,
       collectionName: collection.name,
+      action: 'collection-status',
       iconCls: 'sm-report-icon',
-      action: 'findings',
       leaf: true
+    })
+  // }
+
+  children.push(
+    {
+      id: `${collection.collectionId}-stigs-node`,
+      node: 'stigs',
+      text: 'STIGs',
+      iconCls: 'sm-stig-icon',
+      onAssetChanged: onAssetChanged,
+      onAssetDeleted: onAssetDeleted
     },
     {
       id: `${collection.collectionId}-assets-node`,
@@ -138,12 +167,12 @@ SM.CollectionNodeConfig = function (collection) {
       iconCls: 'sm-asset-icon'
     },
     {
-      id: `${collection.collectionId}-stigs-node`,
-      node: 'stigs',
-      text: 'STIGs',
-      iconCls: 'sm-stig-icon',
-      onAssetChanged: onAssetChanged,
-      onAssetDeleted: onAssetDeleted
+      id: `${collection.collectionId}-findings-node`,
+      text: 'Reports',
+      collectionId: collection.collectionId,
+      collectionName: collection.name,
+      iconCls: 'sm-report-icon',
+      children: reports
     }
   )
   let node = {
@@ -211,7 +240,7 @@ SM.AssetStigNodeConfig = function (asset, stig) {
     iconCls: 'sm-stig-icon',
     stigName: stig.benchmarkId,
     assetName: asset.name,
-    stigRevStr: stig.lastRevisionStr,
+    // stigRevStr: stig.lastRevisionStr,
     assetId: asset.assetId,
     collectionId: asset.collection.collectionId,
     workflow: asset.collection.workflow,
@@ -226,7 +255,7 @@ SM.StigNodeConfig = function (collectionId, stig) {
     text: stig.benchmarkId,
     report: 'stig',
     iconCls: 'sm-stig-icon',
-    stigRevStr: stig.lastRevisionStr,
+    // stigRevStr: stig.lastRevisionStr,
     id: `${collectionId}-${stig.benchmarkId}-stigs-stig-node`,
     benchmarkId: stig.benchmarkId,
     qtip: stig.title
@@ -235,14 +264,14 @@ SM.StigNodeConfig = function (collectionId, stig) {
 
 SM.StigAssetNodeConfig = function (stig, asset) {
   return {
-    id: `${asset.collection.collectionId}-${asset.assetId}-${stig.benchmarkId}-leaf`,
+    id: `${asset.collection.collectionId}-${stig.benchmarkId}-${asset.assetId}-leaf`,
     text: asset.name,
     leaf: true,
     report: 'review',
     iconCls: 'sm-asset-icon',
     stigName: stig.benchmarkId,
     assetName: asset.name,
-    stigRevStr: stig.lastRevisionStr, // HACK: relies on exclusion of other assigned stigs from /assets
+    // stigRevStr: stig.lastRevisionStr,
     assetId: asset.assetId,
     collectionId: asset.collection.collectionId,
     benchmarkId: stig.benchmarkId,
@@ -250,17 +279,32 @@ SM.StigAssetNodeConfig = function (stig, asset) {
   }
 }
 
+SM.StigBatchNodeConfig = function (benchmarkId, collectionId) {
+  return {
+    id: `${collectionId}-batch-${benchmarkId}-leaf`,
+    sortToTop: true,
+    text: 'Collection review',
+    cls: 'sm-tree-node-collection-review',
+    leaf: true,
+    report: 'collection-review',
+    iconCls: 'sm-collection-icon',
+    collectionId: collectionId,
+    benchmarkId: benchmarkId,
+    qtip: 'Review multiple assets'
+  }
+}
+
+
 SM.AppNavTree = Ext.extend(Ext.tree.TreePanel, {
     initComponent: function() {
       let me = this
       let config = {
-          id: 'app-nav-tree',
           autoScroll: true,
           split: true,
           collapsible: true,
           title: '<span onclick="window.keycloak.logout()">' + curUser.display + ' - Logout</span>',
           bodyStyle: 'padding:5px;',
-          width: me.width || 280,
+          width: me.width || 300,
           minSize: 220,
           root: {
             nodeType: 'async',
@@ -274,12 +318,16 @@ SM.AppNavTree = Ext.extend(Ext.tree.TreePanel, {
           loadMask: 'Loading...',
           listeners: {
             click: me.treeClick,
+            render: this.treeRender,
             beforeexpandnode: function (n) {
               n.loaded = false; // always reload from the server
             }
           }
       }
+
       this.onCollectionCreated = function (apiCollection) {
+        const collectionGrant = curUser.collectionGrants.find( g => g.collection.collectionId === apiCollection.collectionId )
+        if (collectionGrant) {
           let collectionRoot = me.getNodeById('collections-root')
           collectionRoot.appendChild( SM.CollectionNodeConfig( apiCollection ) )
           function sortFn (a, b) {
@@ -289,17 +337,20 @@ SM.AppNavTree = Ext.extend(Ext.tree.TreePanel, {
             if (b.attributes.id === 'collection-create-leaf') {
               return 1
             }
-            if (a.text < b.text) {
+            if (a.text.toUpperCase() < b.text.toUpperCase()) {
               return -1
             }
-            if (a.text > b.text) {
+            if (a.text.toUpperCase() > b.text.toUpperCase()) {
               return 1
             }
             return 0
           }
           collectionRoot.sort(sortFn)
+        }
       }
+
       this.sortNodes = (a, b) => a.text < b.text ? -1 : 1
+
       this.onAssetChanged = (apiAsset) => {
         let assetsNode = me.getNodeById(`${apiAsset.collection.collectionId}-assets-node`)
         if (assetsNode && assetsNode.isExpanded() ) {
@@ -317,6 +368,7 @@ SM.AppNavTree = Ext.extend(Ext.tree.TreePanel, {
         let assetsNode = me.getNodeById(`${apiAsset.collection.collectionId}-assets-node`, true)
         if ( assetsNode && assetsNode.isExpanded() ) {
           assetsNode.appendChild(SM.AssetNodeConfig(apiAsset.collection.collectionId, apiAsset))
+          assetsNode.sort(SM.NodeSorter)
         }
         let stigsNode = me.getNodeById(`${apiAsset.collection.collectionId}-stigs-node`)
         if (stigsNode && stigsNode.isExpanded()) {
@@ -349,6 +401,29 @@ SM.AppNavTree = Ext.extend(Ext.tree.TreePanel, {
               }
             })
           }
+          function sortFn (a, b) {
+            if (a.attributes.id === 'collection-create-leaf') {
+              return -1
+            }
+            if (b.attributes.id === 'collection-create-leaf') {
+              return 1
+            }
+            if (a.text.toUpperCase() < b.text.toUpperCase()) {
+              return -1
+            }
+            if (a.text.toUpperCase() > b.text.toUpperCase()) {
+              return 1
+            }
+            return 0
+          }
+          collectionRoot.sort(sortFn)
+        }
+      }
+      this.onCollectionDeleted = function (collectionId) {
+        let collectionRoot = me.getNodeById('collections-root')
+        let collectionNode = collectionRoot.findChild('id', `${collectionId}-collection-node`, true)
+        if (collectionNode) {
+          collectionNode.remove()
         }
       }
       this.onStigAssetsChanged = async (collectionId, benchmarkId, apiStigAssets) => {
@@ -458,6 +533,7 @@ SM.AppNavTree = Ext.extend(Ext.tree.TreePanel, {
       // Attach handlers for app events
       SM.Dispatcher.addListener('collectioncreated', this.onCollectionCreated)
       SM.Dispatcher.addListener('collectionchanged', this.onCollectionChanged)
+      SM.Dispatcher.addListener('collectiondeleted', this.onCollectionDeleted)
       SM.Dispatcher.addListener('assetchanged', this.onAssetChanged, me)
       SM.Dispatcher.addListener('assetcreated', this.onAssetCreated, me)
       SM.Dispatcher.addListener('assetdeleted', this.onAssetDeleted, me)
@@ -478,6 +554,12 @@ SM.AppNavTree = Ext.extend(Ext.tree.TreePanel, {
                   iconCls: 'sm-setting-icon',
                   expanded: true,
                   children: [
+                    {
+                      id: 'collection-admin',
+                      text: 'Collections',
+                      leaf: true,
+                      iconCls: 'sm-collection-icon'
+                    },
                     {
                       id: 'user-admin',
                       text: 'Users',
@@ -517,8 +599,8 @@ SM.AppNavTree = Ext.extend(Ext.tree.TreePanel, {
               url: `${STIGMAN.Env.apiBase}/collections`,
               method: 'GET'
             })
-            let r = JSON.parse(result.response.responseText)
-            let content = r.map(collection => SM.CollectionNodeConfig(collection))
+            let apiCollections = JSON.parse(result.response.responseText)
+            let content = apiCollections.map(collection => SM.CollectionNodeConfig(collection))
             if (curUser.privileges.canCreateCollection) {
               content.unshift({
                 id: `collection-create-leaf`,
@@ -544,8 +626,8 @@ SM.AppNavTree = Ext.extend(Ext.tree.TreePanel, {
                 projection: 'assets'
               }
             })
-            let r = JSON.parse(result.response.responseText)
-            let content = r.assets.map(asset => SM.AssetNodeConfig(collectionId, asset))
+            let apiCollection = JSON.parse(result.response.responseText)
+            let content = apiCollection.assets.map(asset => SM.AssetNodeConfig(collectionId, asset))
             cb(content, { status: true })
             return
           }
@@ -561,8 +643,8 @@ SM.AppNavTree = Ext.extend(Ext.tree.TreePanel, {
                 projection: 'stigs'
               }
             })
-            let asset = JSON.parse(result.response.responseText)
-            let content = asset.stigs.map(stig => SM.AssetStigNodeConfig(asset, stig))
+            let apiAsset = JSON.parse(result.response.responseText)
+            let content = apiAsset.stigs.map(stig => SM.AssetStigNodeConfig(apiAsset, stig))
             cb(content, { status: true })
             return
           }
@@ -578,8 +660,8 @@ SM.AppNavTree = Ext.extend(Ext.tree.TreePanel, {
                 projection: 'stigs'
               }
             })
-            let r = JSON.parse(result.response.responseText)
-            let content = r.stigs.map( stig => SM.StigNodeConfig( collectionId, stig ) )
+            let apiCollection = JSON.parse(result.response.responseText)
+            let content = apiCollection.stigs.map( stig => SM.StigNodeConfig( collectionId, stig ) )
             cb( content, { status: true } )
             return
           }
@@ -588,17 +670,22 @@ SM.AppNavTree = Ext.extend(Ext.tree.TreePanel, {
           if (match) {
             let collectionId = match[1]
             let benchmarkId = match[2]
-            let result = await Ext.Ajax.requestPromise({
-              url: `${STIGMAN.Env.apiBase}/assets`,
-              method: 'GET',
-              params: {
-                collectionId: collectionId,
-                benchmarkId: benchmarkId,
-                projection: 'stigs'
-              }
+              // TODO: Should use endpoint /collections/{collectionId}/stigs/{benchmarkId}/assets
+              let result = await Ext.Ajax.requestPromise({
+              url: `${STIGMAN.Env.apiBase}/collections/${collectionId}/stigs/${benchmarkId}/assets`,
+              method: 'GET'
             })
-            let r = JSON.parse(result.response.responseText)
-            let content = r.map(asset => SM.StigAssetNodeConfig(asset.stigs[0], asset))
+            let apiAssets = JSON.parse(result.response.responseText)
+            let content = []
+            if (apiAssets.length > 0) {
+            // Allow for batch review node
+            collectionGrant = curUser.collectionGrants.find( g => g.collection.collectionId === collectionId )
+              if (curUser.privileges.globalAccess || (collectionGrant && collectionGrant.accessLevel >= 2)) {
+                content.push( SM.StigBatchNodeConfig( benchmarkId, collectionId ) )
+              }
+              let stigAssetNodes = apiAssets.map(asset => SM.StigAssetNodeConfig({benchmarkId: benchmarkId}, asset))
+              content = content.concat(stigAssetNodes)
+            }      
             cb(content, { status: true })
             return
           }
@@ -615,11 +702,20 @@ SM.AppNavTree = Ext.extend(Ext.tree.TreePanel, {
       
         if (n.attributes.report == 'review') {
           idAppend = '-' + n.attributes.assetId + '-' + n.attributes.benchmarkId.replace(".", "_");
-          tab = Ext.getCmp('reviews-center-tab').getItem('reviewTab' + idAppend);
+          tab = Ext.getCmp('main-tab-panel').getItem('reviewTab' + idAppend);
           if (tab) {
             tab.show();
           } else {
             addReview(n.attributes);
+          }
+        }
+        if (n.attributes.report == 'collection-review') {
+          idAppend = '-' + n.attributes.collectionId + '-' + n.attributes.benchmarkId.replace(".", "_");
+          tab = Ext.getCmp('main-tab-panel').getItem('collection-review-tab' + idAppend);
+          if (tab) {
+            tab.show();
+          } else {
+            addCollectionReview(n.attributes);
           }
         }
         if (n.attributes.action == 'import') {
@@ -632,11 +728,23 @@ SM.AppNavTree = Ext.extend(Ext.tree.TreePanel, {
           let collectionRootNode = n.parentNode
           let fp = new SM.CollectionForm({
             btnText: 'Create',
-            btnHandler: () => {
-              let values = fp.getForm().getFieldValues()
-              createCollection(values, curUser.userId)
+            btnHandler: async () => {
+              try {
+                let values = fp.getForm().getFieldValues()
+                await addOrUpdateCollection(0, values, {
+                  elevate: false,
+                  showManager: true
+                })
+              }
+              catch (e) {
+                alert (e.message)
+              }
+              finally {
+                appwindow.close()
+              }
             }
           })
+
           fp.getForm().setValues({
             grants: [{
               user: {
@@ -646,9 +754,10 @@ SM.AppNavTree = Ext.extend(Ext.tree.TreePanel, {
               accessLevel: 4
             }],
           })
+
           let appwindow = new Ext.Window({
             id: 'window-project-info',
-            title: 'Create STIG Manager Project',
+            title: 'Create Collection',
             modal: true,
             width: 560,
             height:550,
@@ -658,14 +767,21 @@ SM.AppNavTree = Ext.extend(Ext.tree.TreePanel, {
             buttonAlign:'right',
             items: fp
           })
+
           appwindow.show(document.body)
         }
       
         if (n.attributes.action == 'collection-management') {
-            addCollectionManager(n.attributes.collectionId, n.attributes.collectionName)
+          addCollectionManager(n.attributes.collectionId, n.attributes.collectionName)
         }
-      
+        if (n.attributes.action == 'collection-status') {
+          addCompletionStatus(n.attributes.collectionId, n.attributes.collectionName)
+        }
+
         switch (n.id) {
+          case 'collection-admin':
+            addCollectionAdmin();
+            break;
           case 'user-admin':
             addUserAdmin();
             break;
@@ -675,7 +791,36 @@ SM.AppNavTree = Ext.extend(Ext.tree.TreePanel, {
           case 'appdata-admin':
             addAppDataAdmin();
             break;
+          case 'wo-admin':
+            doWo();
+            break;
+        }
+
+        function doWo() {
+          let w = 400
+          let h = 400
+          let left = (window.innerWidth/2)-(w/2)
+          let top = (window.innerHeight/2)-(h/2)
+          doWoWindow = window.open(window.keycloak.createLoginUrl({
+            scope: 'stig-manager'
+          }),'doWo', `top=${top},left=${left},width=${w},height=${h},resizeable,scrollbars,status`)
+          let one = doWoWindow
         }
       
-    }
+    },
+    treeRender: function (tree) {
+      new Ext.ToolTip({
+          target: tree.header,
+          showDelay: 2000,
+          dismissDelay: 0,
+          autoWidth: true,
+          title: 'OAuth2 token payload',
+          listeners: {
+              show: function (tip) {
+                  tip.update("<pre>" + JSON.stringify(window.keycloak.tokenParsed,null,2) + "</pre>")
+              }
+          }
+      }) 
+  }
+
 })

@@ -90,8 +90,9 @@ exports.replaceAppData = async function (importOpts, appData, userObject, res ) 
           assetId,
           collectionId,
           name,
+          description,
           ip,
-          nonnetwork,
+          noncomputing,
           metadata
         ) VALUES ?`,
         insertBinds: []
@@ -143,7 +144,7 @@ exports.replaceAppData = async function (importOpts, appData, userObject, res ) 
         insertBinds: []
       },
       review: {
-        sqlDelete: `DELETE FROM review`,
+        sqlDelete: `TRUNCATE review`,
         sqlInsert: `INSERT IGNORE INTO review (
           assetId,
           ruleId,
@@ -179,16 +180,16 @@ exports.replaceAppData = async function (importOpts, appData, userObject, res ) 
     }
     
     // Tables: collection, collection_grant_map
-    for (const p of collections) {
+    for (const c of collections) {
       dml.collection.insertBinds.push([
-        parseInt(p.collectionId) || null,
-        p.name,
-        p.workflow,
-        JSON.stringify(p.metadata)
+        parseInt(c.collectionId) || null,
+        c.name,
+        c.workflow,
+        JSON.stringify(c.metadata)
       ])
-      for (const grant of p.grants) {
+      for (const grant of c.grants) {
         dml.collectionGrant.insertBinds.push([
-          parseInt(p.collectionId) || null,
+          parseInt(c.collectionId) || null,
           parseInt(grant.userId) || null,
           grant.accessLevel
         ])
@@ -203,8 +204,9 @@ exports.replaceAppData = async function (importOpts, appData, userObject, res ) 
         parseInt(assetFields.assetId) || null,
         parseInt(assetFields.collectionId) || null,
         assetFields.name,
+        assetFields.description,
         assetFields.ip,
-        assetFields.nonnetwork ? 1: 0,
+        assetFields.noncomputing ? 1: 0,
         JSON.stringify(assetFields.metadata)
       ])
       let assetId = assetFields.assetId
@@ -273,7 +275,7 @@ exports.replaceAppData = async function (importOpts, appData, userObject, res ) 
 
     // Connect to MySQL and start transaction
     connection = await dbUtils.pool.getConnection()
-    await connection.query('START TRANSACTION')
+    await connection.query('SET FOREIGN_KEY_CHECKS=0')
 
     // // Preload
     // hrstart = process.hrtime() 
@@ -295,14 +297,15 @@ exports.replaceAppData = async function (importOpts, appData, userObject, res ) 
       'asset',
       'userData',
     ]
+    res.write('deletes\n')
     for (const table of tableOrder) {
+      res.write(`${table}\n`)
       hrstart = process.hrtime() 
       ;[result] = await connection.query(dml[table].sqlDelete)
       hrend = process.hrtime(hrstart)
       stats[table] = {}
       stats[table].delete = `${result.affectedRows} in ${hrend[0]}s  ${hrend[1] / 1000000}ms`
     }
-    res.write('deletes\n')
 
     // Inserts
 
@@ -317,12 +320,14 @@ exports.replaceAppData = async function (importOpts, appData, userObject, res ) 
       'review',
       'reviewHistory'
     ]
+    await connection.query('SET FOREIGN_KEY_CHECKS=1')
     for (const table of tableOrder) {
       if (dml[table].insertBinds.length > 0) {
         hrstart = process.hrtime()
 
         let i, j, bindchunk, chunk = 5000;
         for (i=0,j=dml[table].insertBinds.length; i<j; i+=chunk) {
+          console.log(`table: ${table} chunk: ${i}\n`)
           res.write(`table: ${table} chunk: ${i}\n`)
           bindchunk = dml[table].insertBinds.slice(i,i+chunk);
           ;[result] = await connection.query(dml[table].sqlInsert, [bindchunk])
@@ -331,6 +336,12 @@ exports.replaceAppData = async function (importOpts, appData, userObject, res ) 
         stats[table].insert = `${result.affectedRows} in ${hrend[0]}s  ${hrend[1] / 1000000}ms`
       }
     }
+
+    // Stats
+    hrstart = process.hrtime() 
+    await dbUtils.updateStatsAssetStig( connection, {} )
+    hrend = process.hrtime(hrstart)
+    stats.stats = `${result.affectedRows} in ${hrend[0]}s  ${hrend[1] / 1000000}ms`
     
     // Commit
     hrstart = process.hrtime() 
@@ -360,7 +371,8 @@ exports.replaceAppData = async function (importOpts, appData, userObject, res ) 
     if (typeof connection !== 'undefined') {
       await connection.query('ROLLBACK')
     }
-    throw err
+    res.write(err.message)
+    res.end()
   }
   finally {
     if (typeof connection !== 'undefined') {

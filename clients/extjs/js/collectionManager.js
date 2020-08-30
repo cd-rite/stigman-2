@@ -1,22 +1,29 @@
 async function addCollectionManager( collectionId, collectionName ) {
 	try {
+		let collectionGrant = curUser.collectionGrants.find( g => g.collection.collectionId === collectionId )
 		let collectionPanel = new SM.CollectionPanel({
 			collectionId: collectionId,
+			cls: 'sm-round-panel',
+			margins: { top: SM.Margin.top, right: SM.Margin.adjacent, bottom: SM.Margin.adjacent, left: SM.Margin.edge },
 			region: 'north',
 			padding: '10px 10px 10px 10px',
 			border: false,
 			split: true,
 			layout: 'fit',
+			allowDelete: collectionGrant.accessLevel === 4,
 			height: 300
 		})
 		let grantGrid = new SM.UserGrantsGrid({
 			collectionId: collectionId,
+			showAccessBtn: true,
 			url: `${STIGMAN.Env.apiBase}/collections/${collectionId}`,
 			baseParams: {
 				elevate: curUser.privileges.canAdmin,
 				projection: 'grants'
 			},
 			title: 'Grants',
+			cls: 'sm-round-panel',
+			margins: { top: SM.Margin.adjacent, right: SM.Margin.adjacent, bottom: SM.Margin.bottom, left: SM.Margin.edge },
 			border: false,
 			region: 'center',
 			listeners: {
@@ -42,14 +49,20 @@ async function addCollectionManager( collectionId, collectionName ) {
 		let assetGrid = new SM.CollectionAssetGrid({
 			collectionId: collectionId,
 			url: `${STIGMAN.Env.apiBase}/assets`,
+			cls: 'sm-round-panel',
+			margins: { top: SM.Margin.top, right: SM.Margin.edge, bottom: SM.Margin.adjacent, left: SM.Margin.adjacent },
 			title: 'Assets',
 			region: 'north',
+			border: false,
 			split: true,
 			height: '50%'
 		})
 		let stigGrid = new SM.CollectionStigsGrid({
 			collectionId: collectionId,
 			url: `${STIGMAN.Env.apiBase}/collections/${collectionId}/stigs`,
+			cls: 'sm-round-panel',
+			margins: { top: SM.Margin.adjacent, right: SM.Margin.edge, bottom: SM.Margin.bottom, left: SM.Margin.adjacent },
+			border: false,
 			title: 'STIGs',
 			region: 'center'
 		})
@@ -60,13 +73,19 @@ async function addCollectionManager( collectionId, collectionName ) {
 			iconCls: 'sm-collection-icon',
 			closable: true,
 			layout: 'border',
+			layoutConfig: {
+				targetCls: 'sm-border-layout-ct'
+			},
 			items: [
 				{
 					region: 'west',
 					width: 500,
 					split: true,
-					border: true,
+					border: false,
 					layout: 'border',
+					layoutConfig: {
+						targetCls: 'sm-border-layout-ct'
+					},
 					items: [
 						collectionPanel,
 						grantGrid 
@@ -75,6 +94,10 @@ async function addCollectionManager( collectionId, collectionName ) {
 				{
 					region: 'center',
 					layout: 'border',
+					border: false,
+					layoutConfig: {
+						targetCls: 'sm-border-layout-ct'
+					},
 					items: [
 						assetGrid,
 						stigGrid
@@ -89,7 +112,7 @@ async function addCollectionManager( collectionId, collectionName ) {
 		managerTab.updateTitle = function () {
 			this.setTitle(`${this.collectionName} : Configuration`)
 		}
-		let thisTab = Ext.getCmp('reviews-center-tab').add(managerTab)
+		let thisTab = Ext.getCmp('main-tab-panel').add(managerTab)
 		managerTab.updateTitle.call(managerTab)
 
 		let result = await Ext.Ajax.requestPromise({

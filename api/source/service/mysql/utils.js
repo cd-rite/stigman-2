@@ -61,9 +61,14 @@ module.exports.initializeDatabase = async function () {
     process.on('SIGTERM', closePoolAndExit)
     process.on('SIGINT', closePoolAndExit)
 
-    // Preflight the pool
-    let result = await retry(_this.testConnection, {})
-    console.log(result)
+    // Preflight the pool every 5 seconds
+    let result = await retry(_this.testConnection, {
+      retries: 24,
+      factor: 1,
+      minTimeout: 5 * 1000,
+      maxTimeout: 5 * 1000
+    })
+    // console.log(result)
 
     // Perform migrations
     const umzug = new Umzug({
@@ -111,12 +116,12 @@ module.exports.getUserObject = async function (username) {
       cast(ud.globalAccess is true as json) as globalAccess,
       cast(ud.canCreateCollection is true as json) as canCreateCollection,
       cast(ud.canAdmin is true as json) as canAdmin,
-      CASE WHEN COUNT(pg.collectionId) > 0
+      CASE WHEN COUNT(cg.collectionId) > 0
         THEN 
           json_arrayagg(
             json_object(
-              'collectionId', CAST(pg.collectionId as char),
-              'accessLevel', pg.accessLevel
+              'collectionId', CAST(cg.collectionId as char),
+              'accessLevel', cg.accessLevel
             )
           )
         ELSE
@@ -124,7 +129,7 @@ module.exports.getUserObject = async function (username) {
       END as collectionGrants
     from 
       user_data ud
-      left join collection_grant pg on ud.userId = pg.userId
+      left join collection_grant cg on ud.userId = cg.userId
     where
       UPPER(username)=UPPER(?)
     group by
@@ -176,13 +181,13 @@ module.exports.userHasAssetStig = async function (assetId, benchmarkId, elevate,
       from
         stig_asset_map sa
         left join asset a on sa.assetId = a.assetId
-        left join collection_grant pg on a.collectionId = pg.collectionId
+        left join collection_grant cg on a.collectionId = cg.collectionId
         left join user_stig_asset_map usa on sa.saId = usa.saId
       where
-        pg.userId = ?
+        cg.userId = ?
         and sa.benchmarkId = ?
         and sa.assetId = ?
-        and (pg.accessLevel >= 2 or (pg.accessLevel = 1 and usa.userId = pg.userId))`
+        and (cg.accessLevel >= 2 or (cg.accessLevel = 1 and usa.userId = cg.userId))`
 
       let [rows] = await _this.pool.query(sql, [userObject.userId, benchmarkId, assetId])
       return rows.length > 0   
@@ -217,31 +222,31 @@ module.exports.scrubReviewsByUser = async function(reviews, elevate, userObject)
       const sql = `SELECT
         CONCAT(sa.assetId, '-', rgr.ruleId) as permitted
       FROM
-        collection_grant pg
-        inner join asset a on pg.collectionId = a.collectionId
+        collection_grant cg
+        inner join asset a on cg.collectionId = a.collectionId
         inner join stig_asset_map sa on a.assetId = sa.assetId
         inner join revision rev on sa.benchmarkId = rev.benchmarkId
         inner join rev_group_map rg on rev.revId = rg.revId
         inner join rev_group_rule_map rgr on rg.rgId = rgr.rgId
       WHERE
-        pg.userId = ?
-        and pg.accessLevel != 1
+        cg.userId = ?
+        and cg.accessLevel != 1
       GROUP BY
         sa.assetId, rgr.ruleId
       UNION
       SELECT
         CONCAT(sa.assetId, '-', rgr.ruleId) as permitted
       FROM
-        collection_grant pg
-        inner join asset a on pg.collectionId = a.collectionId
+        collection_grant cg
+        inner join asset a on cg.collectionId = a.collectionId
         inner join stig_asset_map sa on a.assetId = sa.assetId
-        inner join user_stig_asset_map usa on (sa.saId = usa.saId and pg.userId = usa.userId)
+        inner join user_stig_asset_map usa on (sa.saId = usa.saId and cg.userId = usa.userId)
         inner join revision rev on sa.benchmarkId = rev.benchmarkId
         inner join rev_group_map rg on rev.revId = rg.revId
         inner join rev_group_rule_map rgr on rg.rgId = rgr.rgId
       WHERE
-        pg.userId = ?
-        and pg.accessLevel = 1
+        cg.userId = ?
+        and cg.accessLevel = 1
       GROUP BY
         sa.assetId, rgr.ruleId`
       let [rows] = await _this.pool.query(sql, [userObject.userId, userObject.userId])
@@ -264,6 +269,102 @@ module.exports.scrubReviewsByUser = async function(reviews, elevate, userObject)
     throw (e)
   }
 
+}
+module.exports.updateStatsAssetStig = async function(connection, options) {
+  try {
+    if (!connection) { throw ('Connection required')}
+    // Handle optional predicates, 
+    let predicates = []
+    let binds = []
+    let whereClause = ''
+
+    if (options.rules && options.rules.length > 0) {
+      predicates.push(`sa.benchmarkId IN (SELECT DISTINCT benchmarkId from current_group_rule where ruleId IN ?)`)
+      binds.push( [options.rules] )
+    }
+
+    if (options.collectionId) {
+      predicates.push('a.collectionId = ?')
+      binds.push(options.collectionId)
+    }
+    if (options.assetId) {
+      predicates.push('a.assetId = ?')
+      binds.push(options.assetId)
+    }
+    if (options.benchmarkId) {
+      predicates.push('sa.benchmarkId = ?')
+      binds.push(options.benchmarkId)
+    }
+    if (predicates.length > 0) {
+      whereClause = `where ${predicates.join(' and ')}`
+    }
+
+    const sqlUpdate = `
+    insert into stats_asset_stig (
+      assetId,
+      benchmarkId,
+      minTs,
+      maxTs,
+      savedManual,
+      savedAuto,
+      submittedManual,
+      submittedAuto,
+      rejectedManual,
+      rejectedAuto,
+      acceptedManual,
+      acceptedAuto,
+      highCount,
+      mediumCount,
+      lowCount)
+    select * from (
+      select
+        sa.assetId,
+        sa.benchmarkId,
+        min(reviews.ts) as minTs,
+        max(reviews.ts) as maxTs,
+        sum(CASE WHEN reviews.autoResult = 0 and reviews.statusId = 0 THEN 1 ELSE 0 END) as savedManual,
+        sum(CASE WHEN reviews.autoResult = 1 and reviews.statusId = 0 THEN 1 ELSE 0 END) as savedAuto,
+        sum(CASE WHEN reviews.autoResult = 0 and reviews.statusId = 1 THEN 1 ELSE 0 END) as submittedManual,
+        sum(CASE WHEN reviews.autoResult = 1 and reviews.statusId = 1 THEN 1 ELSE 0 END) as submittedAuto,
+        sum(CASE WHEN reviews.autoResult = 0 and reviews.statusId = 2 THEN 1 ELSE 0 END) as rejectedManual,
+        sum(CASE WHEN reviews.autoResult = 1 and reviews.statusId = 2 THEN 1 ELSE 0 END) as rejectedAuto,
+        sum(CASE WHEN reviews.autoResult = 0 and reviews.statusId = 3 THEN 1 ELSE 0 END) as acceptedManual,
+        sum(CASE WHEN reviews.autoResult = 1  and reviews.statusId = 3 THEN 1 ELSE 0 END) as acceptedAuto,
+        sum(CASE WHEN reviews.resultId=4 and r.severity='high' THEN 1 ELSE 0 END) as highCount,
+        sum(CASE WHEN reviews.resultId=4 and r.severity='medium' THEN 1 ELSE 0 END) as mediumCount,
+        sum(CASE WHEN reviews.resultId=4 and r.severity='low' THEN 1 ELSE 0 END) as lowCount
+      from
+        asset a
+        left join stig_asset_map sa using (assetId)
+        left join current_group_rule cgr using (benchmarkId)
+        left join rule r using (ruleId)
+        left join stigman.review reviews on (r.ruleId=reviews.ruleId and reviews.assetId=sa.assetId)
+      ${whereClause}
+      group by
+        sa.assetId,
+        sa.benchmarkId
+    ) as stats
+    on duplicate key update
+        minTs = stats.minTs,
+        maxTs = stats.maxTs,
+        savedManual = stats.savedManual,
+        savedAuto = stats.savedAuto,
+        submittedManual = stats.submittedManual,
+        submittedAuto = stats.submittedAuto,
+        rejectedManual = stats.rejectedManual,
+        rejectedAuto = stats.rejectedAuto,
+        acceptedManual = stats.acceptedManual,
+        acceptedAuto = stats.acceptedAuto,
+        highCount = stats.highCount,
+        mediumCount = stats.mediumCount,
+        lowCount = stats.lowCount
+    `
+    const [result] = await connection.query(sqlUpdate, binds)
+    return result  
+  }
+  catch (err) {
+    throw err
+  }
 }
 
 

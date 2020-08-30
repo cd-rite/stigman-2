@@ -183,7 +183,7 @@ SM.CollectionStigsGrid = Ext.extend(Ext.grid.GridPanel, {
                         hasMenu: false,
                         gridBasename: 'STIGs (grid)',
                         storeBasename: 'STIGs (store)',
-                        iconCls: 'icon-save',
+                        iconCls: 'sm-export-icon',
                         text: 'Export'
                     },{
                         xtype: 'tbfill'
@@ -490,7 +490,7 @@ SM.StigAssetsGrid = Ext.extend(Ext.grid.GridPanel, {
                         hasMenu: false,
                         gridBasename: 'Assets (grid)',
                         storeBasename: 'Assets (store)',
-                        iconCls: 'icon-save',
+                        iconCls: 'sm-export-icon',
                         text: 'Export'
                     },{
                         xtype: 'tbfill'
@@ -598,6 +598,10 @@ SM.StigAssetsComboGrid = Ext.extend(Ext.grid.GridPanel, {
                         this.grid.store.resumeEvents();
                         this.grid.getView().refresh();
                     }
+                    // Editor must remove the form fields it created; otherwise the
+                    // form validation continues to include those fields
+                    editor.removeAll(false)
+                    editor.initialized = false
                 },
                 afteredit: function (editor, changes, record, index) {
                     // "Save" the record by reconfiguring the store's data collection

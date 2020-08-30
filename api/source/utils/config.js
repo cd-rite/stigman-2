@@ -1,6 +1,16 @@
 let config = {
-    apiVersion: '1.0',
-    setClassification: process.env.STIGMAN_CLASSIFICATION,
+    version: '1.0.0-beta',
+    commit: {
+        branch: process.env.COMMIT_BRANCH || 'na',
+        sha: process.env.COMMIT_SHA || 'na',
+        tag: process.env.COMMIT_TAG || 'na',
+        describe: process.env.COMMIT_DESCRIBE || 'na'
+    },
+    settings: {
+        setClassification: process.env.STIGMAN_CLASSIFICATION,
+        lastAccessResolution: 60,
+        autoEnrollUser: process.env.STIGMAN_API_AUTO_ENROLL || "false"
+    },
     client: {
         enabled: process.env.STIGMAN_CLIENT_ENABLED || "true",
         directory: process.env.STIGMAN_CLIENT_DIRECTORY || "./client"
@@ -19,7 +29,9 @@ let config = {
         password: process.env.STIGMAN_DB_PASSWORD || "stigman"
     },
     init: {
-        superuser: process.env.STIGMAN_SUPERUSER || 'admin'
+        superuser: process.env.STIGMAN_SUPERUSER || 'admin',
+        importStigs: process.env.STIGMAN_API_IMPORT_STIGS || 'false',
+        importScap: process.env.STIGMAN_API_IMPORT_SCAP || 'false'
     },
     swaggerUi: {
         enabled: process.env.STIGMAN_SWAGGER_ENABLED || "true", 
@@ -32,6 +44,10 @@ let config = {
         userid_claim: process.env.STIGMAN_JWT_USER_CLAIM || "preferred_username",
         groups_claim: process.env.STIGMAN_JWT_GROUPS_CLAIM || "groups"
     }
+}
+
+if (!config.commit.branch) {
+    
 }
 
 module.exports = config

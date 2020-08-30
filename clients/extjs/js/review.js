@@ -37,7 +37,8 @@ async function addReview(leaf, selectedRule, selectedResource) {
       type: 'string'
     }, {
       name: 'severity',
-      type: 'string'
+      type: 'string',
+      sortType: sortSeverity
     }, {
       name: 'result',
       type: 'string'
@@ -450,10 +451,13 @@ async function addReview(leaf, selectedRule, selectedResource) {
   // The group grid
   /******************************************************/
   var groupGrid = new Ext.grid.GridPanel({
+    cls: 'sm-round-panel',
+    margins: { top: SM.Margin.top, right: SM.Margin.adjacent, bottom: SM.Margin.bottom, left: SM.Margin.edge },
+    border: false,
     region: 'west',
     id: 'groupGrid' + idAppend,
     sm_benchmarkId: leaf.benchmarkId,
-    sm_revisionStr: leaf.stigRevStr,
+    sm_revisionStr: 'latest',
     width: '35%',
     minWidth: 340,
     hideMode: 'offsets',
@@ -529,7 +533,7 @@ async function addReview(leaf, selectedRule, selectedResource) {
         },
         rowselect: {
           fn: function (sm, index, record) {
-            handleGroupSelectionForAsset(record, parseInt(leaf.collectionId), leaf.assetId, idAppend, groupGrid.sm_benchmarkId, groupGrid.sm_revisionStr); // defined in stigmanUtil.js
+            handleGroupSelectionForAsset(record, leaf.collectionId, leaf.assetId, idAppend, groupGrid.sm_benchmarkId, groupGrid.sm_revisionStr); // defined in stigmanUtil.js
           }
         }
       }
@@ -546,20 +550,22 @@ async function addReview(leaf, selectedRule, selectedResource) {
         var autoCheckAvailable = record.get('autoCheckAvailable');
         if (autoCheckAvailable === true) {
           return 'sm-scap-grid-item';
-        } else {
-          return 'sm-manual-grid-item';
-        }
+        } 
+        // else {
+        //   return 'sm-manual-grid-item';
+        // }
       }
     }),
     columns: [
       {
-        id: 'result' + idAppend,
-        header: '&#160;', // per docs
-        menuDisabled: true,
-        width: 25,
-        dataIndex: 'result',
+        id: 'severity' + idAppend,
+        header: "CAT",
+        fixed: true,
+        width: 48,
+        align: 'center',
+        dataIndex: 'severity',
         sortable: true,
-        renderer: renderResult
+        renderer: renderSeverity
       },
       {
         id: 'groupId' + idAppend,
@@ -598,18 +604,20 @@ async function addReview(leaf, selectedRule, selectedResource) {
         sortable: true
       },
       {
-        id: 'severity' + idAppend,
-        header: "CAT",
+        id: 'result' + idAppend,
+        header: '&#160;', // per docs
+        menuDisabled: true,
         width: 32,
-        align: 'center',
-        dataIndex: 'severity',
+        fixed: true,
+        dataIndex: 'result',
         sortable: true,
-        renderer: renderSeverity
+        renderer: renderResult
       },
       {
         id: 'status' + idAppend,
         header: "Status",
-        width: 50,
+        fixed: true,
+        width: 44,
         align: 'center',
         dataIndex: 'status',
         sortable: true,
@@ -727,7 +735,7 @@ async function addReview(leaf, selectedRule, selectedResource) {
         group: 'revision-submenu-group' + idAppend,
         handler: handleRevisionMenu
       }
-      if (item.revisionStr == activeRevisionStr) {
+      if (item.revisionStr == activeRevisionStr || (activeRevisionStr === 'latest' && i === 0)) {
         item.checked = true;
         returnObject.activeRevisionLabel = item.text;
       } else {
@@ -807,12 +815,18 @@ async function addReview(leaf, selectedRule, selectedResource) {
   /******************************************************/
 
   let contentTpl = new Ext.XTemplate(
-    '<div class=cs-home-header-top>{ruleId}</div>',
-    '<div class=cs-home-header-sub>{title} (Category {severity})</div>',
+    '<div class=cs-home-header-top>{ruleId}',
+      '<span class="sm-content-sprite sm-severity-{severity}">',
+        `<tpl if="severity == 'high'">CAT 1</tpl>`,
+        `<tpl if="severity == 'medium'">CAT 2</tpl>`,
+        `<tpl if="severity == 'low'">CAT 3</tpl>`, 
+      '</span>',
+    '</div>',
+    '<div class=cs-home-header-sub>{title}</div>',
     '<div class=cs-home-body-title>Manual Check',
     '<div class=cs-home-body-text>',
     '<tpl for="checks">',
-    '<pre>{[values.content.trim()]}</pre>',
+      '<pre>{[values.content.trim()]}</pre>',
     '</tpl>',
     '</div>',
     '</div>',
@@ -829,7 +843,9 @@ async function addReview(leaf, selectedRule, selectedResource) {
     '<pre>{[values.vulnDiscussion.trim()]}</pre>',
     '</div>',
     '<div class=cs-home-body-text><b>Documentable: </b>{documentable}</div>',
-    '<div class=cs-home-body-text><b>Responsibility: </b>{responsibility}</div>',
+    `<tpl if="typeof(responsibility) != 'undefined'">`,
+      '<div class=cs-home-body-text><b>Responsibility: </b>{responsibility}</div>',
+    '</tpl>',
     '<div class=cs-home-body-text><b>Controls: </b><br>',
     '<table class=cs-home-body-table border="1">',
     '<tr><td><b>CCI</b></td><td><b>AP Acronym</b></td><td><b>Control</b></td></tr>',
@@ -838,7 +854,8 @@ async function addReview(leaf, selectedRule, selectedResource) {
     '</tpl>',
     '</table>',
     '</div>',
-    '</div>')
+    '</div>'
+  )
 
   /******************************************************/
   // START Resources panel
@@ -1379,6 +1396,9 @@ async function addReview(leaf, selectedRule, selectedResource) {
   /******************************************************/
 
   var resourcesPanel = new Ext.Panel({
+    cls: 'sm-round-panel',
+    margins: { top: SM.Margin.top, right: SM.Margin.edge, bottom: SM.Margin.adjacent, left: SM.Margin.adjacent },
+    border: false,
     region: 'center',
     title: 'Review Resources',
     layout: 'fit',
@@ -1404,12 +1424,7 @@ async function addReview(leaf, selectedRule, selectedResource) {
         id: 'feedback-tab' + idAppend,
         //padding: 2,
         autoScroll: true
-      }, {
-        title: 'Attachments',
-        layout: 'fit',
-        id: 'attach-tab' + idAppend,
-        items: attachGrid
-      }, {
+      },{
         title: 'History',
         layout: 'fit',
         id: 'history-tab' + idAppend,
@@ -1428,6 +1443,10 @@ async function addReview(leaf, selectedRule, selectedResource) {
   /******************************************************/
 
   var reviewForm = new Ext.form.FormPanel({
+    cls: 'sm-round-panel',
+    bodyCssClass: 'sm-review-form',
+    border: false,
+    margins: { top: SM.Margin.adjacent, right: SM.Margin.edge, bottom: SM.Margin.bottom, left: SM.Margin.adjacent },
     region: 'south',
     //disabled: true,
     split: true,
@@ -1435,12 +1454,12 @@ async function addReview(leaf, selectedRule, selectedResource) {
     height: '65%',
     minHeight: 320,
     id: 'reviewForm' + idAppend,
-    baseCls: 'x-plain',
-    border: true,
-    headerCfg: {
-      cls: 'x-panel-header',
-      border: false
-    },
+    // baseCls: 'x-plain',
+    // border: true,
+    // headerCfg: {
+    //   cls: 'x-panel-header',
+    //   border: false
+    // },
     title: 'Review on ' + leaf.assetName,
     padding: 10,
     labelWidth: 50,
@@ -1878,10 +1897,12 @@ async function addReview(leaf, selectedRule, selectedResource) {
   /******************************************************/
   // END input form
   /******************************************************/
-
   var reviewItems = [
     groupGrid,
     {
+      cls: 'sm-round-panel',
+      margins: { top: SM.Margin.top, right: SM.Margin.adjacent, bottom: SM.Margin.bottom, left: SM.Margin.adjacent },
+      border: false,
       region: 'center',
       //disabled: true,
       xtype: 'panel',
@@ -1909,6 +1930,7 @@ async function addReview(leaf, selectedRule, selectedResource) {
 
   let reviewTab = new Ext.Panel ({
     id: 'reviewTab' + idAppend,
+    border: false,
     collectionId: leaf.collectionId,
     collectionName: apiCollection.name,
     assetName: leaf.assetName,
@@ -1948,7 +1970,7 @@ async function addReview(leaf, selectedRule, selectedResource) {
                 case 'no':
                   Ext.getCmp('result-combo' + idAppend).changed = false;
                   Ext.getCmp('action-combo' + idAppend).changed = false;
-                  Ext.getCmp('reviews-center-tab').remove('reviewTab' + idAppend);
+                  Ext.getCmp('main-tab-panel').remove('reviewTab' + idAppend);
                   break;
                 case 'cancel':
                   break;
@@ -1967,12 +1989,12 @@ async function addReview(leaf, selectedRule, selectedResource) {
     this.setTitle(`${this.collectionName} : ${this.assetName} : ${this.stigName}`)
   }
 
-  var thisTab = Ext.getCmp('reviews-center-tab').add(reviewTab);
+  var thisTab = Ext.getCmp('main-tab-panel').add(reviewTab);
   reviewTab.updateTitle.call(reviewTab)
   thisTab.show();
 
   groupGrid.getStore().load();
-  loadRevisionMenu(leaf.benchmarkId, leaf.stigRevStr, idAppend)
+  loadRevisionMenu(leaf.benchmarkId, 'latest', idAppend)
 
   async function saveReview(saveParams) {
     // saveParams = {
@@ -2005,6 +2027,9 @@ async function addReview(leaf, selectedRule, selectedResource) {
           result = await Ext.Ajax.requestPromise({
             url: `${STIGMAN.Env.apiBase}/collections/${leaf.collectionId}/reviews/${leaf.assetId}/${fp.groupGridRecord.data.ruleId}`,
             method: 'PATCH',
+            params: {
+              projection: 'history'
+            },
             headers: { 'Content-Type': 'application/json;charset=utf-8' },
             jsonData: {
               status: saveParams.type == 'submit' ? 'submitted' : 'saved'
@@ -2018,6 +2043,9 @@ async function addReview(leaf, selectedRule, selectedResource) {
             url: `${STIGMAN.Env.apiBase}/collections/${leaf.collectionId}/reviews/${leaf.assetId}/${fp.groupGridRecord.data.ruleId}`,
             method: 'PUT',
             headers: { 'Content-Type': 'application/json;charset=utf-8' },
+            params: {
+              projection: 'history'
+            },
             jsonData: jsonData
           })
           reviewFromApi = JSON.parse(result.response.responseText)
@@ -2028,6 +2056,9 @@ async function addReview(leaf, selectedRule, selectedResource) {
             url: `${STIGMAN.Env.apiBase}/collections/${leaf.collectionId}/reviews/${leaf.assetId}/${fp.groupGridRecord.data.ruleId}`,
             method: 'PUT',
             headers: { 'Content-Type': 'application/json;charset=utf-8' },
+            params: {
+              projection: 'history'
+            },
             jsonData: jsonData
           })
           reviewFromApi = JSON.parse(result.response.responseText)
@@ -2038,11 +2069,15 @@ async function addReview(leaf, selectedRule, selectedResource) {
             url: `${STIGMAN.Env.apiBase}/collections/${leaf.collectionId}/reviews/${leaf.assetId}/${fp.groupGridRecord.data.ruleId}`,
             method: 'PUT',
             headers: { 'Content-Type': 'application/json;charset=utf-8' },
+            params: {
+              projection: 'history'
+            },
             jsonData: jsonData
           })
           reviewFromApi = JSON.parse(result.response.responseText)
           break
       }
+      // Update group grid
       resultCombo = Ext.getCmp('result-combo' + idAppend)
       resultComment = Ext.getCmp('result-comment' + idAppend)
       actionCombo = Ext.getCmp('action-combo' + idAppend)
@@ -2053,11 +2088,14 @@ async function addReview(leaf, selectedRule, selectedResource) {
       fp.groupGridRecord.data.reviewComplete = reviewFromApi.reviewComplete
       fp.groupGridRecord.data.status = reviewFromApi.status
       fp.groupGridRecord.commit()
+      filterGroupStore()
 
+      // Update reviewForm
       let extDate = new Date(reviewFromApi.ts)
       Ext.getCmp('editor' + idAppend).setValue(`${extDate.format('Y-m-d H:i')} by ${reviewFromApi.username}`)
 
-      filterGroupStore()
+      // Update history
+      historyData.store.loadData(reviewFromApi.history)
 
       //Reset lastSavedData to current values, so we do not trigger the save again:
       resultCombo.lastSavedData = resultCombo.value;
@@ -2067,7 +2105,7 @@ async function addReview(leaf, selectedRule, selectedResource) {
 
       //Continue the action that triggered this save (if any):					
       if (saveParams.source == "closeTab") {
-        Ext.getCmp('reviews-center-tab').remove('reviewTab' + idAppend)
+        Ext.getCmp('main-tab-panel').remove('reviewTab' + idAppend)
 
       }
       else if (saveParams.source == "selectGroup") {

@@ -720,34 +720,41 @@ function Sm_StigAssetView (conf) {
 
 function Sm_HistoryData (idAppend) {
 	this.fields = Ext.data.Record.create([
-		{	name:'historyId',
-			type: 'integer'
-		}
-		,{
-			name: 'ts',
-			type: 'date',
-			dateFormat: 'Y-m-d H:i:s'
-		}
-		,{
-			name:'activityType',
+		{
+			name:'result',
 			type: 'string'
-		}
-		,{
-			name:'columnName',
+		},
+		{
+			name:'resultComment',
 			type:'string'
-		}
-		,{
-			name:'oldValue',
+		},
+		{
+			name:'action',
 			type:'string'
-		}
-		,{
-			name:'newValue',
+		},{
+			name:'actionComment',
 			type:'string'
-		}
-		,{
+		},
+		{
+			name:'autoResult',
+			type:'boolean'
+		},
+		{
+			name:'userId',
+			type:'string'
+		},{
 			name:'username',
 			type:'string'
-		}		
+		},
+		{
+			name:'ts',
+			type:'date',
+			dateFormat: 'Y-m-d H:i:s'
+		},
+		{
+			name:'status',
+			type:'string'
+		}	
 	]);
 
 	this.store = new Ext.data.JsonStore({
@@ -756,9 +763,11 @@ function Sm_HistoryData (idAppend) {
 		fields: this.fields,
 		sortInfo: {
 			field: 'ts',
-			direction: 'ASC' // or 'DESC' (case sensitive for local sorting)
+			direction: 'DESC' // or 'DESC' (case sensitive for local sorting)
 		},
-		idProperty: 'historyId'
+		idProperty: (v) => {
+			return v.ts + v.status
+		}
 	});
 	
 	this.grid = new Ext.grid.GridPanel({
@@ -774,7 +783,6 @@ function Sm_HistoryData (idAppend) {
 		}),
 		columns: [
 			{ 	
-				id:'history-ts' + idAppend,
 				header: "Timestamp",
 				width: 120,
 				fixed: true,
@@ -784,94 +792,66 @@ function Sm_HistoryData (idAppend) {
 				align: 'left',
 				xtype: 'datecolumn',
 				format:	'Y-m-d H:i:s'
-			}
-			,{ 	
-				id:'history-activity' + idAppend,
-				header: "Activity",
-				width: 60,
-				dataIndex: 'none',
-				sortable: false,
-				align: 'left',
-				renderer: function(value, metadata, record) {
-					var returnStr = record.data.username;
-					switch (record.data.activityType) {
-						case 'insert':
-							returnStr += ' created the review.<br>';
+			},
+			{ 	
+				header: "Status", 
+				width: 50,
+				fixed: true,
+				dataIndex: 'status',
+				sortable: true,
+				renderer: renderStatuses
+			},
+			{ 
+				id:'result' + idAppend,
+				header: "Result",
+				width: 50,
+				fixed: true,
+				dataIndex: 'result',
+				renderer: function (val) {
+					switch (val) {
+						case 'fail':
+							return '<div style="color:red;font-weight:bolder;text-align:center">O</div>';
 							break;
-						case 'update':
-							returnStr += ' modified the review.<br>';
+						case 'pass':
+							return '<div style="color:green;font-weight:bolder;text-align:center">NF</div>';
 							break;
-					}
-					switch (record.data.columnName) {
-						case 'result':
-							returnStr += '<b>Result</b> set to <i>';
-							switch (record.data.newValue) {
-								case 'NA':
-									returnStr += 'Not Applicable';
-									break;
-								case 'NF':
-									returnStr += 'Not a Finding';
-									break;
-								case 'O':
-									returnStr += 'Open';
-									break;
-								default:
-									returnStr += 'Unknown';
-									break;
-							}
-							returnStr += '</i>';
-							break;
-						case 'resultComment':
-							returnStr += '<b>Result comment</b> set to:<br><i>' + record.data.newValue.replace(/\n/g, "<br//>") + '</i>';
-							break;
-						case 'action':
-							returnStr += '<b>Action</b> set to <i>';
-								switch (record.data.newValue) {
-								case 'remediate':
-									returnStr += 'Remediate';
-									break;
-								case 'mitigate':
-									returnStr += 'Mitigate';
-									break;
-								case 'exception':
-									returnStr += 'Exception';
-									break;
-								default:
-									returnStr += 'NULL';
-									break;
-							}
-							returnStr += '</i>';
-							break;
-						case 'actionComment':
-							returnStr += '<b>Action comment</b> set to:<br><i>' + record.data.newValue.replace(/\n/g, "<br//>") + '</i>';
-							break;
-						case 'status':
-							returnStr += '<b>Status</b> set to <i>';
-								switch (record.data.newValue) {
-								case 'saved':
-									returnStr += 'In progress';
-									break;
-								case 'submitted':
-									returnStr += 'Submitted';
-									break;
-								case 'rejected':
-									returnStr += 'Returned';
-									break;
-								case 'accepted':
-									returnStr += 'Approved';
-									break;
-								default:
-									returnStr += 'NULL';
-									break;
-							}
-							returnStr += '</i>';
+						case 'notapplicable':
+							return '<div style="color:grey;font-weight:bolder;text-align:center">NA</div>';
 							break;
 					}
-					return '<div style="white-space:normal !important;">'+ returnStr +'</div>';
-				}
+				},
+				sortable: true
+			},
+			{ 	
+				header: "Result comment", 
+				width: 100,
+				dataIndex: 'resultComment',
+				renderer: columnWrap,
+				sortable: true
+			},
+			{ 	
+				header: "Action", 
+				width: 80,
+				fixed: true,
+				dataIndex: 'action',
+				renderer: function (val) {
+					let actions = {
+						remediate: 'Remediate',
+						mitigate: 'Mitigate',
+						exception: 'Exception'
+					}
+					return actions[val];
+				},
+				sortable: true
+			},
+			{ 	
+				header: "Action comment", 
+				width: 100,
+				dataIndex: 'actionComment',
+				renderer: columnWrap,
+				sortable: true
 			}
-		],
-		autoExpandColumn: 'history-activity' + idAppend
+		]
 	});
 }
 
@@ -896,6 +876,19 @@ function sortRuleId (ruleId) {
 		return ruleId;
 	} else {
 		return padZero(vNum[1],8);
+	}
+}
+
+function sortSeverity (severity) {
+	switch (severity) {
+		case 'mixed':
+			return 0
+		case 'low':
+			return 1
+		case 'medium':
+			return 2
+		case 'high':
+			return 3
 	}
 }
 
@@ -1162,30 +1155,47 @@ function checked(val) {
 	}
 }
 
+// function renderResult(val, metaData, record, rowIndex, colIndex, store) {
+// 	if (val == 'pass') {
+// 		return '<div style="color:green;font-weight:bolder;text-align:center;">NF</div>';
+// 	} else if (val == 'fail'){
+// 		return '<div style="color:red;font-weight:bolder;text-align:center">O</div>';
+// 	} else if (val == 'notapplicable'){
+// 		return '<div style="color:grey;font-weight:bolder;text-align:center">NA</div>';
+// 	} else {
+// 		return '';
+// 	}
+// }
+
 function renderResult(val, metaData, record, rowIndex, colIndex, store) {
-	if (val == 'pass') {
-		return '<div style="color:green;font-weight:bolder;text-align:center;">NF</div>';
-	} else if (val == 'fail'){
-		return '<div style="color:red;font-weight:bolder;text-align:center">O</div>';
-	} else if (val == 'notapplicable'){
-		return '<div style="color:grey;font-weight:bolder;text-align:center">NA</div>';
-	} else {
-		return '';
+	switch (val) {
+		case 'pass':
+			return '<div class="sm-grid-result-sprite sm-result-pass">NF</div>'
+		case 'fail':
+			return '<div class="sm-grid-result-sprite sm-result-fail">O</div>'
+		case 'notapplicable':
+			return '<div class="sm-grid-result-sprite sm-result-na">NA</div>'
+		default:
+			return ''
 	}
 }
+
 
 
 function renderStatuses(val, metaData, record, rowIndex, colIndex, store) {
 	var statusIcons = '';
 	switch (record.data.status) {
+		case 'saved':
+			statusIcons += '<img src="img/disk-16.png" width=12 height=12 ext:qtip="Submitted" style="padding-top: 1px;">';
+			break;
 		case 'submitted':
-			statusIcons += '<img src="img/ready-16.png" width=12 height=12 ext:qtip="Submitted">';
+			statusIcons += '<img src="img/ready-16.png" width=12 height=12 ext:qtip="Submitted" style="padding-top: 1px;">';
 			break;
 		case 'rejected':
-			statusIcons += '<img src="img/rejected-16.png" width=12 height=12 ext:qtip="Rejected">';
+			statusIcons += '<img src="img/rejected-16.png" width=12 height=12 ext:qtip="Rejected" style="padding-top: 1px;">';
 			break;
 		case 'accepted':
-			statusIcons += '<img src="img/greencheckt.gif" width=12 height=12 ext:qtip="Accepted">';
+			statusIcons += '<img src="img/lock-16.png" width=12 height=12 ext:qtip="Accepted" style="padding-top: 1px;">';
 			break;
 		default:
 			statusIcons += '<img src="img/pixel.gif" width=12 height=12>';
@@ -1193,7 +1203,7 @@ function renderStatuses(val, metaData, record, rowIndex, colIndex, store) {
 	}
 	statusIcons += '<img src="img/pixel.gif" width=4 height=12>';
 	if (record.data.hasAttach) {
-		statusIcons += '<img src="img/attach-16.png" width=12 height=12 ext:qtip="Has attachments">';
+		statusIcons += '<img src="img/attach-16.png" width=12 height=12 ext:qtip="Has attachments" style="padding-top: 1px;">';
 	} else {
 		statusIcons += '<img src="img/pixel.gif" width=12 height=12>';
 	}
@@ -1217,20 +1227,36 @@ function renderStatus(val) {
 	}
 }
 
-function renderSeverity(val) {
+// function renderSeverity(val) {
+// 	switch (val) {
+// 		case 'high':
+// 			return '1';
+// 		case 'medium':
+// 			return '2';
+// 		case 'low':
+// 			return '3';
+// 		case 'mixed':
+// 			return 'M';
+// 		default:
+// 			return 'U';
+// 	}
+// }
+
+const renderSeverity = (val) => {
 	switch (val) {
 		case 'high':
-			return '1';
+			return '<span class="sm-grid-sprite sm-severity-high">CAT 1</span>'
 		case 'medium':
-			return '2';
+			return '<span class="sm-grid-sprite sm-severity-medium">CAT 2</span>'
 		case 'low':
-			return '3';
+			return '<span class="sm-grid-sprite sm-severity-low">CAT 3</span>'
 		case 'mixed':
-			return 'M';
+			return '<span class="sm-grid-sprite sm-severity-low">Mixed</span>'
 		default:
-			return 'U';
+			return '<span class="sm-grid-sprite sm-severity-low">U</span>'
 	}
 }
+
 
 function columnWrap(val){
 	if (undefined != val) {
@@ -1545,6 +1571,7 @@ function uploadArchive(n) {
 
 function uploadStigs(n) {
 	var fp = new Ext.FormPanel({
+		padding: 10,
 		standardSubmit: false,
 		fileUpload: true,
 		baseCls: 'x-plain',

@@ -13,9 +13,11 @@ uploads/
 .env
 
 # ZIP archives #
-*.zip
+# *.zip
 
 # Database #
 stigman-data/
 utl32k.sql
 
+delivery.sh
+state.json

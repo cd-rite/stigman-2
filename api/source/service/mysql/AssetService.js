@@ -18,18 +18,19 @@ exports.queryAssets = async function (inProjection = [], inPredicates = {}, elev
       'CAST(a.assetId as char) as assetId',
       'a.name',
       `json_object (
-        'collectionId', CAST(p.collectionId as char),
-        'name', p.name,
-        'workflow', p.workflow
+        'collectionId', CAST(c.collectionId as char),
+        'name', c.name,
+        'workflow', c.workflow
       ) as "collection"`,
+      'a.description',
       'a.ip',
-      'a.nonnetwork',
+      'a.noncomputing',
       'a.metadata'
     ]
     let joins = [
       'asset a',
-      'left join collection p on a.collectionId = p.collectionId',
-      'left join collection_grant pg on p.collectionId = pg.collectionId',
+      'left join collection c on a.collectionId = c.collectionId',
+      'left join collection_grant cg on c.collectionId = cg.collectionId',
       'left join stig_asset_map sa on a.assetId = sa.assetId',
       'left join current_rev cr on sa.benchmarkId = cr.benchmarkId',
       'left join user_stig_asset_map usa on sa.saId = usa.saId'
@@ -125,8 +126,8 @@ exports.queryAssets = async function (inProjection = [], inPredicates = {}, elev
       predicates.binds.benchmarkId = inPredicates.benchmarkId
     }
     if (context == dbUtils.CONTEXT_USER) {
-      predicates.statements.push('pg.userId = :userId')
-      predicates.statements.push('CASE WHEN pg.accessLevel = 1 THEN usa.userId = pg.userId ELSE TRUE END')
+      predicates.statements.push('cg.userId = :userId')
+      predicates.statements.push('CASE WHEN cg.accessLevel = 1 THEN usa.userId = cg.userId ELSE TRUE END')
       predicates.binds.userId = userObject.userId
     }
 
@@ -138,7 +139,7 @@ exports.queryAssets = async function (inProjection = [], inPredicates = {}, elev
     if (predicates.statements.length > 0) {
       sql += "\nWHERE " + predicates.statements.join(" and ")
     }
-    sql += ' group by a.assetId, a.name, a.collectionId, a.ip, a.nonnetwork, p.collectionId, p.name'
+    sql += ' group by a.assetId, a.name, a.collectionId, a.description, a.ip, a.noncomputing, c.collectionId, c.name'
     sql += ' order by a.name'
   
     connection = await dbUtils.pool.getConnection()
@@ -156,7 +157,7 @@ exports.queryAssets = async function (inProjection = [], inPredicates = {}, elev
   }
 }
 
-exports.queryAssetStigs = async function (inPredicates = {}, elevate = false, userObject) {
+exports.queryStigsByAsset = async function (inPredicates = {}, elevate = false, userObject) {
   let connection
   try {
     const context = userObject.privileges.globalAccess || elevate ? dbUtils.CONTEXT_ALL : dbUtils.CONTEXT_USER
@@ -164,12 +165,13 @@ exports.queryAssetStigs = async function (inPredicates = {}, elevate = false, us
       'distinct cr.benchmarkId', 
       `concat('V', cr.version, 'R', cr.release) as lastRevisionStr`, 
       'cr.benchmarkDateSql as lastRevisionDate',
+      'cr.ruleCount as ruleCount',
       'st.title'
     ]
     let joins = [
       'asset a',
-      'left join collection p on a.collectionId = p.collectionId',
-      'left join collection_grant pg on p.collectionId = pg.collectionId',
+      'left join collection c on a.collectionId = c.collectionId',
+      'left join collection_grant cg on c.collectionId = cg.collectionId',
       'left join stig_asset_map sa on a.assetId = sa.assetId',
       'left join user_stig_asset_map usa on sa.saId = usa.saId',
       'inner join current_rev cr on sa.benchmarkId=cr.benchmarkId',
@@ -189,8 +191,8 @@ exports.queryAssetStigs = async function (inPredicates = {}, elevate = false, us
       predicates.binds.push( inPredicates.benchmarkId )
     }
     if (context == dbUtils.CONTEXT_USER) {
-      predicates.statements.push('pg.userId = ?')
-      predicates.statements.push('CASE WHEN pg.accessLevel = 1 THEN usa.userId = pg.userId ELSE TRUE END')
+      predicates.statements.push('cg.userId = ?')
+      predicates.statements.push('CASE WHEN cg.accessLevel = 1 THEN usa.userId = cg.userId ELSE TRUE END')
       predicates.binds.push( userObject.userId )
     }
     // CONSTRUCT MAIN QUERY
@@ -218,18 +220,18 @@ exports.queryAssetStigs = async function (inPredicates = {}, elevate = false, us
 }
 
 
-exports.queryAssetStigGrants = async function (inPredicates = {}, elevate = false, userObject) {
+exports.queryUsersByAssetStig = async function (inPredicates = {}, elevate = false, userObject) {
   let connection
   try {
     const context = userObject.privileges.globalAccess || elevate ? 'CONTEXT_ALL' : 'CONTEXT_USER'
     const columns = [
-      'ud.userId',
+      'CAST(ud.userId as char) as userId',
       'ud.username'
     ]
     let joins = [
       'asset a',
-      'inner join collection p on a.collectionId = p.collectionId',
-      'inner join collection_grant pg on p.collectionId = pg.collectionId',
+      'inner join collection c on a.collectionId = c.collectionId',
+      'inner join collection_grant cg on c.collectionId = cg.collectionId',
       'inner join stig_asset_map sa on a.assetId = sa.assetId',
       'inner join user_stig_asset_map usa on sa.saId = usa.saId',
       'inner join user_data ud on usa.userId = ud.userId',
@@ -252,8 +254,8 @@ exports.queryAssetStigGrants = async function (inPredicates = {}, elevate = fals
       predicates.binds.push( inPredicates.userId )
     }
     if (context === 'CONTEXT_USER') {
-      predicates.statements.push('pg.userId = ?')
-      predicates.statements.push('CASE WHEN pg.accessLevel = 1 THEN usa.userId = pg.userId ELSE TRUE END')
+      predicates.statements.push('cg.userId = ?')
+      predicates.statements.push('CASE WHEN cg.accessLevel = 1 THEN usa.userId = cg.userId ELSE TRUE END')
       predicates.binds.push( userObject.userId )
     }
     // CONSTRUCT MAIN QUERY
@@ -291,8 +293,8 @@ exports.addOrUpdateAsset = async function (writeAction, assetId, body, projectio
     let { stigs, ...assetFields } = body
 
     // Convert boolean scalar values to database values (true=1 or false=0)
-    if (assetFields.hasOwnProperty('nonnetwork')) {
-      assetFields.nonnetwork = assetFields.nonnetwork ? 1 : 0
+    if (assetFields.hasOwnProperty('noncomputing')) {
+      assetFields.noncomputing = assetFields.noncomputing ? 1 : 0
     }
     if (assetFields.hasOwnProperty('metadata')) {
       assetFields.metadata = JSON.stringify(assetFields.metadata)
@@ -310,9 +312,9 @@ exports.addOrUpdateAsset = async function (writeAction, assetId, body, projectio
     let sqlInsert =
       `INSERT INTO
           asset
-          (name, ip, collectionId, nonnetwork, metadata)
+          (name, ip, description, collectionId, noncomputing, metadata)
         VALUES
-          (:name, :ip, :collectionId, :nonnetwork, :metadata)`
+          (:name, :ip, :description, :collectionId, :noncomputing, :metadata)`
       let [rows] = await connection.query(sqlInsert, binds)
       assetId = rows.insertId
     }
@@ -385,6 +387,8 @@ exports.addOrUpdateAsset = async function (writeAction, assetId, body, projectio
 }
 
 exports.queryChecklist = async function (inProjection, inPredicates, elevate, userObject) {
+
+  //TODO: remove select distinct ruleId from rule_oval_map -- bad execution plan
   let connection
   try {
     let context
@@ -403,7 +407,7 @@ exports.queryChecklist = async function (inProjection, inPredicates, elevate, us
       'g.groupId',
       'g.title as "groupTitle"',
       'r.severity',
-      `cast(scap.ruleId is not null as json) as "autoCheckAvailable"`,
+      `cast(COUNT(scap.ruleId) > 0 as json) as "autoCheckAvailable"`,
       `result.api as "result"`,
       `cast(review.autoResult is true as json) as "autoResult"`,
       `status.api as "status"`,
@@ -433,7 +437,7 @@ exports.queryChecklist = async function (inProjection, inPredicates, elevate, us
       'left join review on r.ruleId = review.ruleId and review.assetId = :assetId',
       'left join result on review.resultId=result.resultId',
       'left join status on review.statusId=status.statusId',
-      'left join (SELECT distinct ruleId FROM	rule_oval_map) scap on r.ruleId=scap.ruleId'
+      'left join rule_oval_map scap on r.ruleId=scap.ruleId'
     ]
     // PREDICATES
     let predicates = {
@@ -462,6 +466,21 @@ exports.queryChecklist = async function (inProjection, inPredicates, elevate, us
     if (predicates.statements.length > 0) {
       sql += "\nWHERE " + predicates.statements.join(" and ")
     }
+    sql += `\ngroup by
+      r.ruleId,
+      r.title,
+      g.groupId,
+      g.title,
+      r.severity,
+      result.api ,
+      review.autoResult ,
+      status.api,
+      review.ruleId,
+      review.resultId,
+      review.actionId,
+      review.resultComment,
+      review.actionComment
+    `
     sql += `\norder by substring(g.groupId from 3) + 0`
   
     connection = await dbUtils.pool.getConnection()
@@ -488,7 +507,11 @@ exports.queryStigAssets = async function (inProjection = [], inPredicates = {}, 
     const context = userObject.privileges.globalAccess || elevate ? dbUtils.CONTEXT_ALL : dbUtils.CONTEXT_USER
     const columns = [
       'DISTINCT CAST(a.assetId as char) as assetId',
-      'a.name'
+      'a.name',
+      `json_object(
+        'collectionId', CAST(c.collectionId as char),
+        'name', c.name,
+        'workflow', c.workflow) as collection`
     ]
     let joins = [
       'collection c',
@@ -839,9 +862,9 @@ exports.deleteAsset = async function(assetId, projection, elevate, userObject) {
   }
 }
 
-exports.deleteAssetStig = async function (assetId, benchmarkId, elevate, userObject ) {
+exports.removeStigFromAsset = async function (assetId, benchmarkId, elevate, userObject ) {
   try {
-    let rows = await _this.queryAssetStigs( {
+    let rows = await _this.queryStigsByAsset( {
       assetId: assetId,
       benchmarkId: benchmarkId
     }, elevate, userObject)
@@ -854,9 +877,9 @@ exports.deleteAssetStig = async function (assetId, benchmarkId, elevate, userObj
   }
 }
 
-exports.deleteAssetStigs = async function (assetId, elevate, userObject ) {
+exports.removeStigsFromAsset = async function (assetId, elevate, userObject ) {
   try {
-    let rows = await _this.queryAssetStigs( {assetId: assetId}, elevate, userObject)
+    let rows = await _this.queryStigsByAsset( {assetId: assetId}, elevate, userObject)
     let sqlDelete = `DELETE FROM stig_asset_map where assetId = ?`
     await dbUtils.pool.query(sqlDelete, [assetId])
     return (rows)
@@ -868,13 +891,7 @@ exports.deleteAssetStigs = async function (assetId, elevate, userObject ) {
 
 exports.deleteAssetStigGrant = async function (assetId, benchmarkId, userId, elevate, userObject ) {
   try {
-    let rows = await _this.queryAssetStigs( {
-      assetId: assetId,
-      benchmarkId: benchmarkId
-    }, elevate, userObject)
-    let sqlDelete = `DELETE FROM stig_asset_map where assetId = ? and benchmarkId = ?`
-    await dbUtils.pool.query(sqlDelete, [assetId, benchmarkId])
-    return (rows[0])
+    // TODO
   }
   catch (err) {
     throw ( writer.respondWithCode ( 500, {message: err.message,stack: err.stack} ) )
@@ -921,9 +938,9 @@ exports.getAssets = async function(collectionId, benchmarkId, projection, elevat
   }
 }
 
-exports.getAssetStigs = async function (assetId, elevate, userObject ) {
+exports.getStigsByAsset = async function (assetId, elevate, userObject ) {
   try {
-    let rows = await _this.queryAssetStigs({
+    let rows = await _this.queryStigsByAsset({
       assetId: assetId
     }, elevate, userObject)
     return (rows)
@@ -934,9 +951,9 @@ exports.getAssetStigs = async function (assetId, elevate, userObject ) {
 
 }
 
-exports.getAssetStigGrants = async function (assetId, benchmarkId, elevate, userObject ) {
+exports.getUsersByAssetStig = async function (assetId, benchmarkId, elevate, userObject ) {
   try {
-    let rows = await _this.queryAssetStigGrants({
+    let rows = await _this.queryUsersByAssetStig({
       assetId: assetId,
       benchmarkId: benchmarkId
     }, elevate, userObject)
@@ -967,7 +984,7 @@ exports.getChecklistByAssetStig = async function(assetId, benchmarkId, revisionS
   }
 }
 
-exports.getStigAssetsByBenchmarkId = async function( collectionId, benchmarkId, projection, elevate, userObject) {
+exports.getAssetsByStig = async function( collectionId, benchmarkId, projection, elevate, userObject) {
   try {
     let rows = await _this.queryStigAssets(projection, {
       collectionId: collectionId,
@@ -982,7 +999,7 @@ exports.getStigAssetsByBenchmarkId = async function( collectionId, benchmarkId, 
 }
 
 
-exports.setStigAssetsByBenchmarkId = async function(collectionId, benchmarkId, assetIds, projection, elevate, userObject) {
+exports.attachAssetsToStig = async function(collectionId, benchmarkId, assetIds, projection, elevate, userObject) {
   let connection
   try {
     connection = await dbUtils.pool.getConnection()
@@ -992,8 +1009,10 @@ exports.setStigAssetsByBenchmarkId = async function(collectionId, benchmarkId, a
     DELETE FROM 
       stig_asset_map
     WHERE 
-      benchmarkId = ?
-      and assetId NOT IN ?`
+      benchmarkId = ?`
+    if (assetIds.length > 0) {
+      sqlDeleteBenchmarks += ' and assetId NOT IN ?'
+    }  
     // DELETE from stig_asset_map, which will cascade into user_stig_aset_map
     await connection.query( sqlDeleteBenchmarks, [ benchmarkId, [assetIds] ] )
     

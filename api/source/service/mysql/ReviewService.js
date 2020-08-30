@@ -16,6 +16,7 @@ exports.getReviews = async function (inProjection = [], inPredicates = {}, userO
       'CAST(r.assetId as char) as assetId',
       'asset.name as "assetName"',
       'r.ruleId',
+      'rule.severity',
       'result.api as "result"',
       'r.resultComment',
       'r.autoResult',
@@ -47,6 +48,7 @@ exports.getReviews = async function (inProjection = [], inPredicates = {}, userO
       'r.assetId',
       'asset.name',
       'r.ruleId',
+      'rule.severity',
       'r.resultId',
       'result.api',
       'r.resultComment',
@@ -63,13 +65,15 @@ exports.getReviews = async function (inProjection = [], inPredicates = {}, userO
     ]
     const joins = [
       'review r',
+      'left join rule on r.ruleId = rule.ruleId',
+      // 'left join rule_cci_map rc on r.ruleId = rc.ruleId',
       'left join result on r.resultId = result.resultId',
       'left join status on r.statusId = status.statusId',
       'left join action on r.actionId = action.actionId',
       'left join user_data ud on r.userId = ud.userId',
       'left join asset on r.assetId = asset.assetId',
-      'left join collection p on asset.collectionId = p.collectionId',
-      'left join collection_grant pg on p.collectionId = pg.collectionId',
+      'left join collection c on asset.collectionId = c.collectionId',
+      'left join collection_grant cg on c.collectionId = cg.collectionId',
       'left join stig_asset_map sa on asset.assetId = sa.assetId',
       'left join user_stig_asset_map usa on sa.saId = usa.saId'
     ]
@@ -81,13 +85,13 @@ exports.getReviews = async function (inProjection = [], inPredicates = {}, userO
           'assetId', CAST(a.assetId as char),
           'name', a.name,
           'collection', json_object(
-            'collectionId', CAST(p.collectionId as char),
-            'name', p.name,
-            'workflow', p.workflow
+            'collectionId', CAST(c.collectionId as char),
+            'name', c.name,
+            'workflow', c.workflow
           )
         )
         from asset a 
-        left join collection p on a.collectionId = p.collectionId
+        left join collection c on a.collectionId = c.collectionId
         where a.assetId = r.assetId) as "asset"`)
     }
     if (inProjection.includes('stigs')) {
@@ -117,29 +121,33 @@ exports.getReviews = async function (inProjection = [], inPredicates = {}, userO
           rule.ruleId = r.ruleId LIMIT 1) as "rule"`)
     }
     if (inProjection.includes('history')) {
+      // OVER clauses and subquery needed to order the json_arrayagg
       columns.push(`
       (select
         coalesce(
-          (select hh.h from 
-            (select
-              json_arrayagg(
+          (select  innerh.h from (select json_arrayagg(
                 json_object(
                   'ts' , DATE_FORMAT(rh.ts, '%Y-%m-%d %H:%i:%s'),
-                  'activityType' , rh.activityType,
-                  'columnName' , rh.columnName,
-                  'oldValue' , rh.oldValue,
-                  'newValue' , rh.newValue,
-                  'userId' , rh.userId,
-                  'username' , ud.username
+                  'result', result.api,
+                  'resultComment', rh.resultComment,
+                  'action', action.api,
+                  'actionComment', rh.actionComment,
+                  'autoResult', cast(rh.autoResult is true as json),
+                  'userId', CAST(rh.userId as char),
+                  'username', ud.username,
+                  'rejectText', rh.rejectText,
+                  'status', status.api
                 )
               ) OVER (order by rh.ts desc) as h,
               ROW_NUMBER() OVER (order by rh.ts) as rn
             FROM
               review_history rh
+              left join result on rh.resultId = result.resultId 
+              left join status on rh.statusId = status.statusId 
+              left join action on rh.actionId = action.actionId 
               left join user_data ud on ud.userId=rh.userId
             where
-              rh.ruleId = :ruleId and
-              rh.assetId = :assetId LIMIT 1) as hh),
+              rh.reviewId = r.reviewId LIMIT 1) as innerh),
           json_array()
         )
       ) as "history"`)
@@ -154,12 +162,54 @@ exports.getReviews = async function (inProjection = [], inPredicates = {}, userO
     // Role/Assignment based access control 
     // CONTEXT_USER
     if (context == dbUtils.CONTEXT_USER) {
-      predicates.statements.push('pg.userId = :userId')
-      predicates.statements.push('CASE WHEN pg.accessLevel = 1 THEN usa.userId = pg.userId ELSE TRUE END')
+      predicates.statements.push('cg.userId = :userId')
+      predicates.statements.push('CASE WHEN cg.accessLevel = 1 THEN usa.userId = cg.userId ELSE TRUE END')
       predicates.binds.userId = userObject.userId
     }
 
       // COMMON
+    if (inPredicates.collectionId) {
+      predicates.statements.push('asset.collectionId = :collectionId')
+      predicates.binds.collectionId = inPredicates.collectionId
+    }
+    if (inPredicates.result) {
+      predicates.statements.push('result.api = :result')
+      predicates.binds.result = inPredicates.result
+    }
+    if (inPredicates.action) {
+      predicates.statements.push('action.api = :action')
+      predicates.binds.action = inPredicates.action
+    }
+    if (inPredicates.status) {
+      predicates.statements.push('status.api = :status')
+      predicates.binds.status = inPredicates.status
+    }
+    if (inPredicates.ruleId) {
+      predicates.statements.push('r.ruleId = :ruleId')
+      predicates.binds.ruleId = inPredicates.ruleId
+    }
+    if (inPredicates.groupId) {
+      predicates.statements.push(`r.ruleId IN (
+        SELECT
+          ruleId
+        FROM
+          current_group_rule
+        WHERE
+          groupId = :groupId
+        )` )
+        predicates.binds.groupId = inPredicates.groupId
+    }
+    if (inPredicates.cci) {
+      predicates.statements.push(`r.ruleId IN (
+        SELECT
+          ruleId
+        FROM
+          rule_cci_map
+        WHERE
+          cci = :cci
+        )` )
+        predicates.binds.cci = inPredicates.cci
+    }
     if (inPredicates.userId) {
       predicates.statements.push('r.userId = :userId')
       predicates.binds.userId = inPredicates.userId
@@ -167,26 +217,6 @@ exports.getReviews = async function (inProjection = [], inPredicates = {}, userO
     if (inPredicates.assetId) {
       predicates.statements.push('r.assetId = :assetId')
       predicates.binds.assetId = inPredicates.assetId
-    }
-    if (inPredicates.ruleId) {
-      predicates.statements.push('r.ruleId = :ruleId')
-      predicates.binds.ruleId = inPredicates.ruleId
-    }
-    if (inPredicates.result) {
-      predicates.statements.push('result.api = :result')
-      predicates.binds.result = inPredicates.result
-    }
-    if (inPredicates.status) {
-      predicates.statements.push('status.api = :status')
-      predicates.binds.status = inPredicates.status
-    }
-    if (inPredicates.action) {
-      predicates.statements.push('action.api = :action')
-      predicates.binds.action = inPredicates.action
-    }
-    if (inPredicates.collectionId) {
-      predicates.statements.push('asset.collectionId = :collectionId')
-      predicates.binds.collectionId = inPredicates.collectionId
     }
     if (inPredicates.benchmarkId) {
       if (inPredicates.revisionStr && inPredicates.revisionStr != 'latest') {
@@ -280,6 +310,39 @@ exports.deleteReviewByAssetRule = async function(assetId, ruleId, projection, us
 exports.putReviewByAssetRule = async function(projection, assetId, ruleId, body, userObject) {
   let connection
   try {
+    let sqlHistory = `
+    INSERT INTO review_history (
+      reviewId,
+      resultId,
+      resultComment,
+      autoResult,
+      actionId,
+      actionComment,
+      ts,
+      userId,
+      rejectText,
+      rejectUserId,
+      statusId
+    ) SELECT 
+        reviewId,
+        resultId,
+        resultComment,
+        autoResult,
+        actionId,
+        actionComment,
+        ts,
+        userId,
+        rejectText,
+        rejectUserId,
+        statusId
+      FROM
+        review 
+      WHERE
+        assetId = :assetId
+        and ruleId = :ruleId
+        and reviewId IS NOT NULL     
+    `    
+
     let values = {
       userId: userObject.userId,
       resultId: dbUtils.REVIEW_RESULT_API[body.result],
@@ -305,8 +368,14 @@ exports.putReviewByAssetRule = async function(projection, assetId, ruleId, body,
     
     connection = await dbUtils.pool.getConnection()
     connection.config.namedPlaceholders = true
+    await connection.query('START TRANSACTION')
+
+    // History
+    await connection.query(sqlHistory, binds)
+
+    await connection.query(sqlUpdate, binds)
     let [result] = await connection.query(sqlUpdate, binds)
-    let status = 'created'
+    let status = 'updated'
     if (result.affectedRows == 0) {
       binds = {
         assetId: assetId,
@@ -320,8 +389,14 @@ exports.putReviewByAssetRule = async function(projection, assetId, ruleId, body,
         (:assetId, :ruleId, :resultId, :resultComment, :actionId, :actionComment, :statusId, :userId, :autoResult)
       `
       ;[result] = await connection.query(sqlInsert, binds)
-      status = 'updated'
+      status = 'creared'
     }
+    await dbUtils.updateStatsAssetStig( connection, {
+      assetId: assetId,
+      rules: [ruleId]
+    })
+    await connection.commit()
+
     let rows = await _this.getReviews(projection, {
       assetId: assetId,
       ruleId: ruleId
@@ -332,6 +407,9 @@ exports.putReviewByAssetRule = async function(projection, assetId, ruleId, body,
     })
   }
   catch(err) {
+    if (typeof connection !== 'undefined') {
+      await connection.rollback()
+    }
     throw ( writer.respondWithCode ( 500, {message: err.message,stack: err.stack} ) )
   }
   finally {
@@ -366,9 +444,42 @@ exports.putReviewsByAsset = async function( assetId, reviews, userObject) {
       actionComment = VALUES(actionComment),
       statusId = VALUES(statusId),
       userId = VALUES(userId)`
-    let binds = []
-    reviews.forEach(review => {
-      let values = [
+    let sqlHistory = `
+    INSERT INTO review_history (
+      reviewId,
+      resultId,
+      resultComment,
+      autoResult,
+      actionId,
+      actionComment,
+      ts,
+      userId,
+      rejectText,
+      rejectUserId,
+      statusId
+    ) SELECT 
+        reviewId,
+        resultId,
+        resultComment,
+        autoResult,
+        actionId,
+        actionComment,
+        ts,
+        userId,
+        rejectText,
+        rejectUserId,
+        statusId
+      FROM
+        review 
+      WHERE
+        assetId = ?
+        and ruleId IN ?
+        and reviewId IS NOT NULL     
+    `
+    let mergeBinds = []
+    let historyRules = []
+    for (const review of reviews) {
+      mergeBinds.push([
         assetId,
         review.ruleId,
         dbUtils.REVIEW_RESULT_API[review.result],
@@ -378,19 +489,26 @@ exports.putReviewsByAsset = async function( assetId, reviews, userObject) {
         review.actionComment || null,
         review.status ? dbUtils.REVIEW_STATUS_API[review.status] : 0,
         userObject.userId
-      ]
-      binds.push(values)
-    })
+      ])
+      historyRules.push(review.ruleId) 
+    }
 
     connection = await dbUtils.pool.getConnection()
-    connection.config.namedPlaceholders = true
-    let [result] = await connection.query(sqlMerge, [binds])
-
+    await connection.query('START TRANSACTION')
+    await connection.query(sqlHistory, [ assetId, [historyRules] ])
+    let [result] = await connection.query(sqlMerge, [mergeBinds])
     let errors = []
+    await dbUtils.updateStatsAssetStig(connection, {
+      assetId: assetId,
+      rules: historyRules
+    })
     await connection.commit()
     return (errors)
   }
   catch(err) {
+    if (typeof connection !== 'undefined') {
+      await connection.rollback()
+    }
     throw ( writer.respondWithCode ( 500, {message: err.message,stack: err.stack} ) )
   }
   finally {
@@ -434,12 +552,47 @@ exports.patchReviewByAssetRule = async function(projection, assetId, ruleId, bod
     if (body.autoResult != undefined) {
       values.autoResult = body.autoResult ? 1 : 0
     }
+    if (body.rejectText != undefined) {
+      values.rejectText = body.rejectText
+    }
 
     let binds = {
       assetId: assetId,
       ruleId: ruleId,
       values: values
     }
+    let sqlHistory = `
+    INSERT INTO review_history (
+      reviewId,
+      resultId,
+      resultComment,
+      autoResult,
+      actionId,
+      actionComment,
+      ts,
+      userId,
+      rejectText,
+      rejectUserId,
+      statusId
+    ) SELECT 
+        reviewId,
+        resultId,
+        resultComment,
+        autoResult,
+        actionId,
+        actionComment,
+        ts,
+        userId,
+        rejectText,
+        rejectUserId,
+        statusId
+      FROM
+        review 
+      WHERE
+        assetId = :assetId
+        and ruleId = :ruleId
+        and reviewId IS NOT NULL`    
+
     let sqlUpdate = `
       UPDATE
         review
@@ -450,11 +603,22 @@ exports.patchReviewByAssetRule = async function(projection, assetId, ruleId, bod
 
     connection = await dbUtils.pool.getConnection()
     connection.config.namedPlaceholders = true
+    await connection.query('START TRANSACTION')
+
+    // History
+    await connection.query(sqlHistory, binds)
+
     let [result] = await connection.query(sqlUpdate, binds)
 
     if (result.affectedRows == 0) {
       throw ({message: "Review must exist to be patched."})
     }
+    await dbUtils.updateStatsAssetStig(connection, {
+      assetId: assetId,
+      rules: [ruleId]
+    })
+
+    await connection.commit()
     let rows = await _this.getReviews(projection, {
       assetId: assetId,
       ruleId: ruleId
@@ -462,6 +626,9 @@ exports.patchReviewByAssetRule = async function(projection, assetId, ruleId, bod
     return (rows[0])
   }
   catch(err) {
+    if (typeof connection !== 'undefined') {
+      await connection.rollback()
+    }
     if (err.code == 400) {
       throw(err)
     }

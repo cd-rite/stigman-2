@@ -17,29 +17,26 @@ async function addCollectionReview ( leaf, selectedRule, selectedAsset ) {
 			}
 		*/
 
-		// Classic compatability. Remove after modernization
-		if (leaf.stigRevStr) {
-			let match = leaf.stigRevStr.match(/V(\d+)R(\d+)/)
-			leaf.revId = `${leaf.benchmarkId}-${match[1]}-${match[2]}`
-		}
 		var idAppend = '-collection-' + leaf.collectionId + '-' + leaf.benchmarkId.replace(".","_");
 		var unsavedChangesPrompt = 'You have modified your review. Would you like to save your changes?';
 
 		/******************************************************/
-		// 'Global' pkgAssetsTpl object for reviewsGrid
+		// 'Global' colAssets array of objects for reviewsGrid
 		/******************************************************/
 		let result = await Ext.Ajax.requestPromise({
-			url: `${STIGMAN.Env.apiBase}/assets/`,
-			params: {
-				collectionId: leaf.collectionId,
-				benchmarkId: leaf.benchmarkId
-			},
-			method: 'GET'
-		})
-		let pkgAssetsApi = JSON.parse(result.response.responseText)
-		let pkgAssets = pkgAssetsApi.map( pkgAsset => ({
-			assetId: pkgAsset.assetId,
-			assetName: pkgAsset.name,
+			url: `${STIGMAN.Env.apiBase}/collections/${leaf.collectionId}`,
+			method: 'GET',
+		  })
+		let apiCollection = JSON.parse(result.response.responseText)
+		result = await Ext.Ajax.requestPromise({
+			url: `${STIGMAN.Env.apiBase}/collections/${leaf.collectionId}/stigs/${leaf.benchmarkId}/assets`,
+			method: 'GET',
+		  })
+		let apiAssets = JSON.parse(result.response.responseText)
+	
+		let colAssets = apiAssets.map( colAsset => ({
+			assetId: colAsset.assetId,
+			assetName: colAsset.name,
 			result: null,
 			resultComment: null,
 			action: null,
@@ -227,6 +224,7 @@ async function addCollectionReview ( leaf, selectedRule, selectedAsset ) {
 				}
 				,{ 
 					text: 'Export Results',
+					disabled: true,
 					iconCls: 'sm-export-icon',
 					hideOnClick: false,
 					menu: {
@@ -270,7 +268,7 @@ async function addCollectionReview ( leaf, selectedRule, selectedAsset ) {
 						//===================================================
 						Ext.Msg.show({
 							title: 'Confirm review reset',
-							msg: 'Do you want to reset ALL approved reviews<br/>for ANY rule associated with<br/>ANY revision of STIG "' + leaf.benchmarkId + '"<br/>for ALL aseets in Collection "' + leaf.collectionName + '"?',
+							msg: 'Do you want to reset ALL approved reviews<br/>for ANY rule associated with<br/>ANY revision of STIG "' + leaf.benchmarkId + '"<br/>for ALL aseets in this Collection?',
 							buttons: {yes: "&nbsp;Reset reviews&nbsp;", no: "Cancel"},
 							icon: Ext.MessageBox.QUESTION,
 							closable: false,
@@ -286,7 +284,7 @@ async function addCollectionReview ( leaf, selectedRule, selectedAsset ) {
 									unlockObject.assetId = -1;
 									unlockObject.assetName = '';
 									unlockObject.collectionId =leaf.collectionId;
-									unlockObject.collectionName=leaf.collectionName;
+									// unlockObject.collectionName=apiCollection.name;
 									unlockObject.gridTorefresh = groupGrid;
 									batchReviewUnlock(unlockObject);
 									//===============================================
@@ -379,10 +377,13 @@ async function addCollectionReview ( leaf, selectedRule, selectedAsset ) {
 		// The group grid
 		/******************************************************/
 		var groupGrid = new Ext.grid.GridPanel({
+			cls: 'sm-round-panel',
+			margins: { top: SM.Margin.top, right: SM.Margin.adjacent, bottom: SM.Margin.adjacent, left: SM.Margin.edge },
+			border: false,
 			region: 'north',
 			id: 'groupGrid' + idAppend,
 			sm_benchmarkId: leaf.benchmarkId,
-			sm_revisionStr: leaf.stigRevStr,
+			sm_revisionStr: 'latest',
 			filterState: 'All',
 			title: 'Checklist',
 			split:true,
@@ -435,6 +436,16 @@ async function addCollectionReview ( leaf, selectedRule, selectedAsset ) {
 			}),
 			columns: [
 				{ 	
+					id:'cat' + idAppend,
+					header: "CAT", 
+					width: 48,
+					align: 'center',
+					dataIndex: 'severity',
+					fixed: true,
+					sortable: true,
+					renderer: renderSeverity
+				},
+				{ 	
 					id:'groupId' + idAppend,
 					header: "Group",
 					width: 95,
@@ -442,8 +453,8 @@ async function addCollectionReview ( leaf, selectedRule, selectedAsset ) {
 					sortable: true,
 					hideable: false,
 					align: 'left'
-				}
-				,{ 	
+				},
+				{ 	
 					id:'ruleId' + idAppend,
 					header: "Rule Id",
 					width: 95,
@@ -452,8 +463,8 @@ async function addCollectionReview ( leaf, selectedRule, selectedAsset ) {
 					sortable: true,
 					hideable: false,
 					align: 'left'
-				}
-				,{ 
+				},
+				{ 
 					id:'groupTitle' + idAppend,
 					header: "Group Title",
 					width: 80,
@@ -462,8 +473,8 @@ async function addCollectionReview ( leaf, selectedRule, selectedAsset ) {
 					renderer: columnWrap,
 					hideable: false,
 					sortable: true
-				}
-				,{ 
+				},
+				{ 
 					id:'ruleTitle' + idAppend,
 					header: "Rule Title",
 					width: 80,
@@ -472,18 +483,8 @@ async function addCollectionReview ( leaf, selectedRule, selectedAsset ) {
 					renderer: columnWrap,
 					hideable: false,
 					sortable: true
-				}
-				,{ 	
-					id:'cat' + idAppend,
-					header: "CAT", 
-					width: 32,
-					align: 'center',
-					dataIndex: 'severity',
-					fixed: true,
-					sortable: true,
-					renderer: renderSeverity
-				}
-				,{ 	
+				},
+				{ 	
 					id:'oCnt' + idAppend,
 					header: '<div style="color:red;font-weight:bolder;">O</div>', 
 					width: 32,
@@ -492,8 +493,8 @@ async function addCollectionReview ( leaf, selectedRule, selectedAsset ) {
 					renderer:renderOpen,
 					fixed: true,
 					sortable: true
-				}
-				,{ 	
+				},
+				{ 	
 					id:'nfCnt' + idAppend,
 					header: '<div style="color:green;font-weight:bolder;">NF</div>', 
 					width: 32,
@@ -502,8 +503,8 @@ async function addCollectionReview ( leaf, selectedRule, selectedAsset ) {
 					dataIndex: 'nfCnt',
 					fixed: true,
 					sortable: true
-				}
-				,{ 	
+				},
+				{ 	
 					id:'naCnt' + idAppend,
 					header: '<div style="color:grey;font-weight:bolder;">NA</div>', 
 					width: 32,
@@ -512,8 +513,8 @@ async function addCollectionReview ( leaf, selectedRule, selectedAsset ) {
 					dataIndex: 'naCnt',
 					fixed: true,
 					sortable: true
-				}
-				,{ 	
+				},
+				{ 	
 					id:'nrCnt' + idAppend,
 					header: "NR", 
 					width: 32,
@@ -522,8 +523,8 @@ async function addCollectionReview ( leaf, selectedRule, selectedAsset ) {
 					dataIndex: 'nrCnt',
 					fixed: true,
 					sortable: true
-				}
-				,{ 	
+				},
+				{ 	
 					id:'readyCnt' + idAppend,
 					header: "<img src=img/ready-16.png width=12 height=12>", 
 					width: 32,
@@ -533,8 +534,8 @@ async function addCollectionReview ( leaf, selectedRule, selectedAsset ) {
 					fixed: true,
 					renderer:renderStatusCounts,
 					sortable: true
-				}
-				,{ 	
+				},
+				{ 	
 					id:'rejectCnt' + idAppend,
 					header: "<img src=img/rejected-16.png width=12 height=12>", 
 					width: 32,
@@ -544,8 +545,8 @@ async function addCollectionReview ( leaf, selectedRule, selectedAsset ) {
 					fixed: true,
 					renderer:renderStatusCounts,
 					sortable: true
-				}
-				,{ 	
+				},
+				{ 	
 					id:'approveCnt' + idAppend,
 					header: "<img src=img/lock-16.png width=12 height=12>", 
 					width: 32,
@@ -671,7 +672,7 @@ async function addCollectionReview ( leaf, selectedRule, selectedAsset ) {
 				group: 'revision-submenu-group' + idAppend,
 				handler: handleRevisionMenu
 			}
-			if (item.revisionStr == activeRevisionStr) {
+			if (item.revisionStr == activeRevisionStr || (activeRevisionStr === 'latest' && i === 0)) {
 				item.checked = true;
 				returnObject.activeRevisionLabel = item.text;
 			} else {
@@ -726,9 +727,12 @@ async function addCollectionReview ( leaf, selectedRule, selectedAsset ) {
 		var reviewsFields = Ext.data.Record.create([
 			{	
 				name:'assetId',
-				type: 'int'
+				type: 'string'
 			},,{	
 				name:'assetName',
+				type: 'string'
+			},{
+				name:'ruleId',
 				type: 'string'
 			},{
 				name:'result',
@@ -747,7 +751,7 @@ async function addCollectionReview ( leaf, selectedRule, selectedAsset ) {
 				type:'boolean'
 			},{
 				name:'userId',
-				type:'int'
+				type:'string'
 			},{
 				name:'username',
 				type:'string'
@@ -767,45 +771,45 @@ async function addCollectionReview ( leaf, selectedRule, selectedAsset ) {
 				field: 'assetName',
 				direction: 'ASC' // or 'DESC' (case sensitive for local sorting)
 			},
-			proxy: new Ext.data.HttpProxy({
-				method: 'POST',
-				url: 'pl/getCurrentReviews.pl', // see options parameter for Ext.Ajax.request
-				api: {
-					// all actions except the following will use above url
-					update: 'pl/updateReviews.pl'
-				},
-				listeners: {
-					beforewrite: function (proxy, action, rs, params) {
-						// set params so server-side script can return counts for rules with updated reviews
-						params.collectionId = thisTab.collectionId;
-						params.benchmarkId = thisTab.benchmarkId;
-						params.revId = thisTab.revId;
-					},
-					write: function (proxy, action, data, response, rs, options) {
-						if (action == 'update') { // response is from our update API
-							var counts = response.raw.counts;
-							for (var i=0; i <counts.length; i++) {
-								var record = groupStore.getAt(groupStore.findExact('ruleId',counts[i].ruleId));
-								record.data.approveCnt = counts[i].approveCnt;
-								record.data.naCnt = counts[i].naCnt;
-								record.data.nfCnt = counts[i].nfCnt;
-								record.data.nrCnt = counts[i].nrCnt;
-								record.data.oCnt = counts[i].oCnt;
-								record.data.readyCnt = counts[i].readyCnt;
-								record.data.rejectCnt = counts[i].rejectCnt;
-								record.commit();
-							}
-						}
-					}
-				}
-			}),
+			// proxy: new Ext.data.HttpProxy({
+			// 	method: 'POST',
+			// 	url: 'pl/getCurrentReviews.pl', // see options parameter for Ext.Ajax.request
+			// 	api: {
+			// 		// all actions except the following will use above url
+			// 		update: `${STIGMAN.Env.apiBase}/collections/${apiCollection.collectionId}/reviews`
+			// 	},
+			// 	listeners: {
+			// 		beforewrite: function (proxy, action, rs, params) {
+			// 			// set params so server-side script can return counts for rules with updated reviews
+			// 			params.collectionId = thisTab.collectionId;
+			// 			params.benchmarkId = thisTab.benchmarkId;
+			// 			params.revId = thisTab.revId;
+			// 		},
+			// 		write: function (proxy, action, data, response, rs, options) {
+			// 			if (action == 'update') { // response is from our update API
+			// 				var counts = response.raw.counts;
+			// 				for (var i=0; i <counts.length; i++) {
+			// 					var record = groupStore.getAt(groupStore.findExact('ruleId',counts[i].ruleId));
+			// 					record.data.approveCnt = counts[i].approveCnt;
+			// 					record.data.naCnt = counts[i].naCnt;
+			// 					record.data.nfCnt = counts[i].nfCnt;
+			// 					record.data.nrCnt = counts[i].nrCnt;
+			// 					record.data.oCnt = counts[i].oCnt;
+			// 					record.data.readyCnt = counts[i].readyCnt;
+			// 					record.data.rejectCnt = counts[i].rejectCnt;
+			// 					record.commit();
+			// 				}
+			// 			}
+			// 		}
+			// 	}
+			// }),
 			root: '',
 			//id: 'reviewStore' + idAppend,
 			fields: reviewsFields,
-			writer:new Ext.data.JsonWriter({
-				encode: true,
-				writeAllFields: false
-			}),
+			// writer:new Ext.data.JsonWriter({
+			// 	encode: true,
+			// 	writeAllFields: false
+			// }),
 			listeners: {
 				exception: function(misc) {
 					// var ourView = reviewsGrid.getView();
@@ -893,7 +897,7 @@ async function addCollectionReview ( leaf, selectedRule, selectedAsset ) {
 						editable: false,
 						store: new Ext.data.SimpleStore({
 							fields: ['result', 'resultStr'],
-							data: [['pass', 'Not a Finding'], ['notapplicable', 'Not Applicable'], ['fail', 'Open']]
+							data: [['pass', 'NF'], ['notapplicable', 'NA'], ['fail', 'O']]
 						}),
 						valueField:'result',
 						displayField:'resultStr',
@@ -979,7 +983,11 @@ async function addCollectionReview ( leaf, selectedRule, selectedAsset ) {
 					fixed: true,
 					dataIndex: 'action',
 					renderer: function (val) {
-						var actions = ['','Remediate','Mitigate','Exception'];
+						let actions = {
+							remediate: 'Remediate',
+							mitigate: 'Mitigate',
+							exception: 'Exception'
+						}
 						return actions[val];
 					},
 					editor: new Ext.form.ComboBox({
@@ -1051,7 +1059,7 @@ async function addCollectionReview ( leaf, selectedRule, selectedAsset ) {
 			isCellEditable: function(col, row) {
 				var record = reviewsStore.getAt(row);
 
-				if (record.data.reviewId == 0) { // review is not created yet
+				if (!record.data.result  && this.getDataIndex(col) !== 'result') { // review is not created yet
 					return false;
 				}
 
@@ -1079,18 +1087,60 @@ async function addCollectionReview ( leaf, selectedRule, selectedAsset ) {
 		});
 
 		var reviewsGrid = new Ext.grid.EditorGridPanel({
+			cls: 'sm-round-panel',
+			margins: { top: SM.Margin.top, right: SM.Margin.edge, bottom: SM.Margin.adjacent, left: SM.Margin.adjacent },
+			border: false,
 			region: 'center',
-			//enableDragDrop: true,
-			//ddGroup: 'gridDDGroup',
-			//plugins: editor,
 			layout: 'fit',
-			//height: 350,
-			border: true,
 			id: 'reviewsGrid' + idAppend,
 			title: 'Reviews',
 			store: reviewsStore,
 			stripeRows:true,
 			colModel: reviewsCm,
+			updateGroupStore: function (reviewsGrid) {
+				let reviewRecords = reviewsGrid.getStore().getRange()
+				let checklistRecord = reviewsGrid.currentChecklistRecord
+				let counts = {
+					oCnt: 0,
+					nfCnt: 0,
+					naCnt: 0,
+					nrCnt: 0,
+					approveCnt: 0,
+					rejectCnt: 0,
+					readyCnt: 0
+				}
+				for (const record of reviewRecords) {
+					switch (record.data.result) {
+						case 'pass':
+							counts.nfCnt++
+							break
+						case 'fail':
+							counts.oCnt++
+							break
+						case 'notapplicable':
+							counts.naCnt++
+							break
+						default:
+							counts.nrCnt++
+							break
+					}
+					switch (record.data.status) {
+						case 'submitted':
+							counts.readyCnt++
+							break
+						case 'accepted':
+							counts.approveCnt++
+							break
+						case 'rejected':
+							counts.rejectCnt++
+							break
+					}
+				}
+				for (const key of Object.keys(counts)) {
+					checklistRecord.data[key] = counts[key]
+				}
+				checklistRecord.commit()				
+			},
 			sm: new Ext.grid.RowSelectionModel ({
 				singleSelect: false,
 				id: 'reviewsSm' + idAppend,
@@ -1140,8 +1190,50 @@ async function addCollectionReview ( leaf, selectedRule, selectedAsset ) {
 						onselectstart: 'return false;'
 					});
 				},
-				afteredit: function (e) {
-					setReviewsGridButtonStates();
+				afteredit: async function (e) {
+					try {
+						let jsonData = {}, result
+						if (e.record.data.status) {
+							// review exists, set status to saved
+							jsonData[e.field] = e.value
+							jsonData.status = 'saved'
+							result = await Ext.Ajax.requestPromise({
+								url: `${STIGMAN.Env.apiBase}/collections/${leaf.collectionId}/reviews/${e.record.data.assetId}/${e.record.data.ruleId}`,
+								method: 'PATCH',
+								jsonData: jsonData
+							})
+						}
+						else {
+							// new review
+							jsonData = {
+								result: e.record.data.result,
+								resultComment: null,
+								action: null,
+								actionComment: null,
+								autoResult: false,
+								status: 'saved'
+							}
+							result = await Ext.Ajax.requestPromise({
+								url: `${STIGMAN.Env.apiBase}/collections/${leaf.collectionId}/reviews/${e.record.data.assetId}/${e.record.data.ruleId}`,
+								method: 'PUT',
+								jsonData: jsonData
+							})
+						}
+						let apiReview = JSON.parse(result.response.responseText)
+						e.grid.getStore().loadData(apiReview, true)
+						// hack to reselect the record for setReviewsGridButtonStates()
+						e.grid.getSelectionModel().selectRow(e.grid.getStore().indexOfId(apiReview.assetId))
+						// e.record.commit()
+		
+						e.grid.updateGroupStore(e.grid)
+						// setReviewsGridButtonStates();
+	
+					}
+					catch(e) {
+						alert(e.message)
+					}
+
+
 				}
 			},
 			view: new Ext.grid.GridView({
@@ -1149,15 +1241,15 @@ async function addCollectionReview ( leaf, selectedRule, selectedAsset ) {
 				autoFill:true,
 				emptyText: 'No data to display.',
 				deferEmptyText:false,
-				getRowClass: function(record, rowIndex, rp, ds){ // rp = rowParams
-					if(record.data.result == 'fail'){
-						return 'sm-grid3-row-red';
-					} else if (record.data.result == 'pass') {
-						return 'sm-grid3-row-green';
-					} else if (record.data.result == 'notapplicable') {
-						return 'sm-grid3-row-grey';
-					}
-				}
+				// getRowClass: function(record, rowIndex, rp, ds){ // rp = rowParams
+				// 	if(record.data.result == 'fail'){
+				// 		return 'sm-grid3-row-red';
+				// 	} else if (record.data.result == 'pass') {
+				// 		return 'sm-grid3-row-green';
+				// 	} else if (record.data.result == 'notapplicable') {
+				// 		return 'sm-grid3-row-grey';
+				// 	}
+				// }
 				
 			}),
 			// width: 300,
@@ -1167,10 +1259,10 @@ async function addCollectionReview ( leaf, selectedRule, selectedAsset ) {
 						xtype: 'tbbutton',
 						icon: 'img/lock-16.png',
 						id: 'reviewsGrid-approveButton' + idAppend,
-						text: 'Approve',
+						text: 'Accept',
 						handler: function (btn) {
 							var selModel = reviewsGrid.getSelectionModel();
-							handleStatusChange (reviewsGrid,selModel,3);
+							handleStatusChange (reviewsGrid,selModel,'accepted');
 						}
 					}
 					,'-'
@@ -1181,23 +1273,23 @@ async function addCollectionReview ( leaf, selectedRule, selectedAsset ) {
 						text: 'Submit',
 						handler: function (btn) {
 							var selModel = reviewsGrid.getSelectionModel();
-							handleStatusChange (reviewsGrid,selModel,1);
+							handleStatusChange (reviewsGrid,selModel,'submitted');
 						}
 					}
 				]
 			}),
-			bbar: new Ext.Toolbar({
-				items: [
-				{
-					xtype: 'tbbutton',
-					iconCls: 'icon-refresh',
-					tooltip: 'Reload this grid',
-					width: 20,
-					handler: function(btn){
-						reviewsGrid.getStore().reload();
-					}
-				}]
-			}),
+			// bbar: new Ext.Toolbar({
+			// 	items: [
+			// 	{
+			// 		xtype: 'tbbutton',
+			// 		iconCls: 'icon-refresh',
+			// 		tooltip: 'Reload this grid',
+			// 		width: 20,
+			// 		handler: function(btn){
+			// 			reviewsGrid.getStore().reload();
+			// 		}
+			// 	}]
+			// }),
 			loadMask: true,
 			emptyText: 'No data to display'
 		});
@@ -1224,16 +1316,15 @@ async function addCollectionReview ( leaf, selectedRule, selectedAsset ) {
 			}
 		}
 
-		async function getReviews(collectionId, ruleId) {
+		async function getReviews(collectionId, record) {
 			try {
 				// Reviews grid
 				let reviewsGrid = Ext.getCmp('reviewsGrid' + idAppend);
 				let reviewsReq = await Ext.Ajax.requestPromise({
-					url: `${STIGMAN.Env.apiBase}/reviews`,
+					url: `${STIGMAN.Env.apiBase}/collections/${collectionId}/reviews`,
 					method: 'GET',
 					params: {
-						collectionId: collectionId,
-						ruleId: ruleId,
+						ruleId: record.data.ruleId,
 					}
 				})
 				let fetchedReviews = JSON.parse(reviewsReq.response.responseText)
@@ -1241,12 +1332,19 @@ async function addCollectionReview ( leaf, selectedRule, selectedAsset ) {
 				for (const fetchedReview of fetchedReviews) {
 					fetchedReviewsLookup[fetchedReview.assetId] = fetchedReview
 				}
-				let pkgReviews = pkgAssets.map(pkgAsset => {
-					return {...pkgAsset, ...fetchedReviewsLookup[pkgAsset.assetId]}
+				let colReviews = colAssets.map(colAsset => {
+					// Won't have a review.ruleId if there is no review for the asset yet
+					if (!fetchedReviewsLookup[colAsset.assetId]) {
+						return { ...colAsset, ...{ruleId: record.data.ruleId} }
+					}
+					else {
+						return {...colAsset, ...fetchedReviewsLookup[colAsset.assetId]}
+					}
 				})
 			
-				reviewsGrid.getStore().loadData(pkgReviews)
-				reviewsGrid.setTitle(`Reviews of ${ruleId}`)
+				reviewsGrid.getStore().loadData(colReviews)
+				reviewsGrid.setTitle(`Reviews of ${record.data.ruleId}`)
+				reviewsGrid.currentChecklistRecord = record
 			}
 			catch (e) {
 				alert (e.message)
@@ -1255,7 +1353,7 @@ async function addCollectionReview ( leaf, selectedRule, selectedAsset ) {
 		
 		function handleGroupSelectionForCollection(record, idAppend, leaf, benchmarkId, revisionStr) {
 			getContent(benchmarkId, revisionStr, record.data.ruleId, record.data.groupId)
-			getReviews(leaf.collectionId, record.data.ruleId)
+			getReviews(leaf.collectionId, record)
 
 			// // Content panel
 			// let contentPanel = Ext.getCmp('content-panel' + idAppend);
@@ -1285,11 +1383,11 @@ async function addCollectionReview ( leaf, selectedRule, selectedAsset ) {
 			// for (const fetchedReview of fetchedReviews) {
 			// 	fetchedReviewsLookup[fetchedReview.assetId] = fetchedReview
 			// }
-			// let pkgReviews = pkgAssets.map(pkgAsset => {
-			// 	return {...pkgAsset, ...fetchedReviewsLookup[pkgAsset.assetId]}
+			// let colReviews = colAssets.map(colAsset => {
+			// 	return {...colAsset, ...fetchedReviewsLookup[colAsset.assetId]}
 			// })
 		
-			// reviewsGrid.getStore().loadData(pkgReviews)
+			// reviewsGrid.getStore().loadData(colReviews)
 		}
 
 		function setReviewsGridButtonStates() {
@@ -1320,7 +1418,8 @@ async function addCollectionReview ( leaf, selectedRule, selectedAsset ) {
 							selections[i].data.action,
 							selections[i].data.actionComment
 							)) {
-							//submitBtnDisabled = false;
+								approveBtnDisabled = true;
+								submitBtnDisabled = false;
 						} else {
 							submitBtnDisabled = true;
 							rejectFormDisabled = true;
@@ -1343,17 +1442,39 @@ async function addCollectionReview ( leaf, selectedRule, selectedAsset ) {
 			rejectFormPanel.setDisabled(rejectFormDisabled);
 		};
 		
-		function handleStatusChange (grid,sm,status) {
-			Ext.getBody().mask('Updating...');
-			var selections = sm.getSelections();
-			var selLength = selections.length;
-			grid.getStore().suspendEvents(false);
-			for (i=0; i<selLength; i++) {
-				selections[i].set('status',status);
+		async function handleStatusChange (grid,sm,status) {
+			try {
+				Ext.getBody().mask('Updating...')
+				const selections = sm.getSelections()
+				const requests = []
+				for (const record of selections) {
+					requests.push(
+						Ext.Ajax.requestPromise({
+							url: `${STIGMAN.Env.apiBase}/collections/${leaf.collectionId}/reviews/${record.data.assetId}/${record.data.ruleId}`,
+							method: 'PATCH',
+							jsonData: {
+								status: status
+							}
+						})
+					)
+				}
+				let results = await Promise.allSettled(requests)
+
+				for (i=0, l=selections.length; i < l; i++) {
+					if (results[i].status === 'fulfilled') {
+						selections[i].data.status = status
+						selections[i].commit()
+					}
+				}
+				grid.updateGroupStore(grid)
+				setReviewsGridButtonStates()
 			}
-			grid.getStore().resumeEvents();
-			grid.getStore().save();
-			
+			catch (e) {
+				alert(e.message)
+			}
+			finally {
+				Ext.getBody().unmask()
+			}
 		};
 
 		function beforeEdit(e) {
@@ -1407,35 +1528,60 @@ async function addCollectionReview ( leaf, selectedRule, selectedAsset ) {
 	/******************************************************/
 	// START Resources Panel
 	/******************************************************/
-		function loadResources (record) {
-			var activeTab = Ext.getCmp('resources-tab-panel' + idAppend).getActiveTab();
-			activeTab.getEl().mask('Loading...');
-			Ext.Ajax.request({
-				url: 'pl/getReviewResources.pl',
-				params: { 
-					checkId: record.id
-				},
-				success: function(response, request) {                               
-					var responseObj = Ext.util.JSON.decode(response.responseText);
-					
-					// load metadata
-					Ext.getCmp('metadataGrid' + idAppend).getStore().loadData(responseObj.metadata);
-					// load feedback
-					var rejectFp = Ext.getCmp('rejectFormPanel' + idAppend);
-					rejectFp.reviewRecords = [record];
-					rejectFp.getForm().setValues(responseObj.feedback);
-					setRejectButtonState();
-					// load attachments
-					//var attachGrid = Ext.getCmp('attachGrid' + idAppend);
-					// attachGrid.getStore().loadData(responseObj.attachments);
-					// attachGrid.gridRecord = record;
+		async function loadResources (record) {
+			let activeTab
+			try {
+				activeTab = Ext.getCmp('resources-tab-panel' + idAppend).getActiveTab()
+				activeTab.getEl().mask('Loading...')
+				let result = await Ext.Ajax.requestPromise({
+					url: `${STIGMAN.Env.apiBase}/collections/${leaf.collectionId}/reviews/${record.data.assetId}/${record.data.ruleId}`,
+					method: 'GET',
+					params: {
+						projection: 'history'
+					}
+				})
+				let apiReview = JSON.parse(result.response.responseText)
+				//TODO: Set the history
+				Ext.getCmp('historyGrid' + idAppend).getStore().loadData(apiReview.history)
 
-					// load history
-					Ext.getCmp('historyGrid' + idAppend).getStore().loadData(responseObj.history);
+				// Reject text
+				const rejectFp = Ext.getCmp('rejectFormPanel' + idAppend)
+				rejectFp.getForm().setValues(apiReview)
+				setRejectButtonState()
 
-					activeTab.getEl().unmask();
+				// Metadata
+				let metadata = []
+				for (const [key, value] of Object.entries(apiReview)) {
+					metadata.push({
+						property: key,
+						value: value
+					})
 				}
-			});
+				Ext.getCmp('metadataGrid' + idAppend).getStore().loadData(metadata)				  
+
+	
+			}
+			catch (e) {
+				alert (e.message)
+			}
+			finally {
+				activeTab.getEl().unmask()
+			}
+
+			// // load metadata
+			// Ext.getCmp('metadataGrid' + idAppend).getStore().loadData(responseObj.metadata);
+			// // load feedback
+			// var rejectFp = Ext.getCmp('rejectFormPanel' + idAppend);
+			// rejectFp.reviewRecords = [record];
+			// rejectFp.getForm().setValues(responseObj.feedback);
+			// setRejectButtonState();
+			// // load attachments
+			// //var attachGrid = Ext.getCmp('attachGrid' + idAppend);
+			// // attachGrid.getStore().loadData(responseObj.attachments);
+			// // attachGrid.gridRecord = record;
+
+			// // load history
+			// Ext.getCmp('historyGrid' + idAppend).getStore().loadData(responseObj.history);
 		}
 		
 	/******************************************************/
@@ -1461,8 +1607,10 @@ async function addCollectionReview ( leaf, selectedRule, selectedAsset ) {
 			}
 		]);
 		
-		var metadataStore = new Ext.data.ArrayStore({
-			fields: metadataFields
+		var metadataStore = new Ext.data.JsonStore({
+			fields: metadataFields,
+			root: '',
+			idProperty: 'property'
 		});
 		
 		var metadataGrid = new Ext.grid.GridPanel({
@@ -1486,7 +1634,6 @@ async function addCollectionReview ( leaf, selectedRule, selectedAsset ) {
 				id:'metadataGrid-value' + idAppend,
 				header: "Value", 
 				width: 150,
-				fixed: true,
 				dataIndex: 'value',
 				sortable: true
 			}]
@@ -1541,7 +1688,7 @@ async function addCollectionReview ( leaf, selectedRule, selectedAsset ) {
 			id: 'rejectGrid' + idAppend,
 			title: 'Standard feedback',
 			flex: 50, // for hbox layout
-			margins: {top:0, right:0, bottom:0, left:10},
+			margins: {top:0, right:10, bottom:0, left:0},
 			hideHeaders: true,
 			hideLabel: true,
 			isFormField: true,
@@ -1627,44 +1774,54 @@ async function addCollectionReview ( leaf, selectedRule, selectedAsset ) {
 				layoutConfig: {
 					align: 'stretch'
 				},
-				items: [rejectOtherPanel,rejectGrid]
+				items: [rejectGrid, rejectOtherPanel]
 			}],
 			buttons: [{
 				text: 'Return review with this feedback',
 				id: 'rejectSubmitButton' + idAppend,
 				iconCls: 'sm-rejected-icon',
-				handler: function(){
-					Ext.getBody().mask("Updating....");
-					var reviewRecords = reviewsGrid.getSelectionModel().getSelections();
-					var checkIds = [];
-					for (var i = 0, len = reviewRecords.length ; i < len ; i++) {
-						checkIds.push(reviewRecords[i].id);
-					}
-					// submitting only updates the reject content, not the status
-					rejectFormPanel.getForm().submit({
-						submitEmptyText: false,
-						params : {
-							checkIds: Ext.util.JSON.encode(checkIds),
-							rejectIds: encodeSm(rejectSm,'rejectId')
-						},
-						success: function (f,a) {
-							reviewsStore.suspendEvents(false);
-							for (var i = 0, len = reviewRecords.length ; i < len ; i++) {
-								reviewRecords[i].beginEdit();
-								reviewRecords[i].set('status','rejected'); // this will update the status to 'reject' when the store is saved
-								reviewRecords[i].endEdit();
-							}
-							reviewsStore.resumeEvents();
-							reviewsStore.save();
-							Ext.getBody().unmask();
-						},
-						failure: function (f,a) {
-						}
-					});
-				}
+				reviewsGrid: reviewsGrid,
+				handler: handleRejections
 			}]
 		});
 		
+		async function handleRejections() {
+			try {
+				const status = 'rejected'
+				const values = rejectFormPanel.getForm().getFieldValues()
+				const selections = reviewsGrid.getSelectionModel().getSelections()
+				const requests = []
+				for (const record of selections) {
+					requests.push(
+						Ext.Ajax.requestPromise({
+							url: `${STIGMAN.Env.apiBase}/collections/${leaf.collectionId}/reviews/${record.data.assetId}/${record.data.ruleId}`,
+							method: 'PATCH',
+							jsonData: {
+								status: status,
+								rejectText: values.rejectText
+							}
+						})
+					)
+				}
+				let results = await Promise.allSettled(requests)
+				for (i=0, l=selections.length; i < l; i++) {
+					if (results[i].status === 'fulfilled') {
+						selections[i].data.status = status
+						selections[i].commit()
+					}
+				}
+				reviewsGrid.updateGroupStore(reviewsGrid)
+				setReviewsGridButtonStates()
+			}
+			catch (e) {
+				alert(e.message)
+			}
+			finally {
+
+			}
+
+		}
+
 		function setRejectButtonState () {
 			var btn = Ext.getCmp('rejectSubmitButton' + idAppend);
 			var text = Ext.getCmp('rejectTextArea' + idAppend);
@@ -1680,177 +1837,6 @@ async function addCollectionReview ( leaf, selectedRule, selectedAsset ) {
 				btn.enable();
 			}
 		}
-
-	/******************************************************/
-	// End Resources Panel/Feedback
-	/******************************************************/
-	// /******************************************************/
-	// // START Resources Panel/Attachments
-	// /******************************************************/
-	// 	var attachFields = Ext.data.Record.create([
-	// 		{
-	// 			name: 'raId',
-	// 			type: 'int'
-	// 		},{
-	// 			name: 'artId',
-	// 			type: 'int'
-	// 		},{	
-	// 			name:'filename',
-	// 			type: 'string'
-	// 		},{
-	// 			name:'userName',
-	// 			type: 'string'
-	// 		},{
-	// 			name:'description',
-	// 			type: 'string'
-	// 		},{
-	// 			name: 'ts',
-	// 			type: 'date',
-	// 			dateFormat: 'Y-m-d H:i:s'
-	// 		}
-	// 	]);
-
-	// 	var attachStore = new Ext.data.JsonStore({
-	// 		root: 'rows',
-	// 		sortInfo: {
-	// 			field: 'filename',
-	// 			direction: 'ASC' // or 'DESC' (case sensitive for local sorting)
-	// 		},
-	// 		storeId: 'attachStore' + idAppend,
-	// 		fields: attachFields,
-	// 		idProperty: 'raId'
-	// 	});
-
-	// 	var attachGrid = new Ext.grid.GridPanel({
-	// 		//region: 'center',
-	// 		disableSelection: true,
-	// 		layout: 'fit',
-	// 		cls: 'custom-artifacts',
-	// 		hideHeaders: true,
-	// 		border: false,
-	// 		id: 'attachGrid' + idAppend,
-	// 		store: attachStore,
-	// 		stripeRows:true,
-	// 		// sm: new Ext.grid.RowSelectionModel ({
-	// 			// singleSelect: true
-	// 		// }),
-	// 		view: new Ext.grid.GridView({
-	// 			forceFit:true,
-	// 			emptyText: 'No attachments to display.',
-	// 			deferEmptyText:false
-	// 		}),
-	// 		// tbar: new Ext.Toolbar({
-	// 			// items: [
-	// 				// {
-	// 					// xtype: 'tbbutton',
-	// 					// text: 'Attach artifact...',
-	// 					// id: 'attachGrid-add-button' + idAppend,
-	// 					// icon: 'img/attach-16.png',
-	// 					// handler: function(btn){
-	// 						// attachArtifact();
-	// 					// }							
-	// 				// }
-	// 			// ]
-	// 		// }),
-	// 		columns: [
-	// 			{ 	
-	// 				id:'attach-filename' + idAppend,
-	// 				header: "Artifact",
-	// 				width: 100,
-	// 				dataIndex: 'filename',
-	// 				sortable: true,
-	// 				align: 'left',
-	// 				renderer: function(value, metadata, record) {
-	// 					//var returnStr = '<img src="' + getFileIcon(value) + '" width=12px height=12px>&nbsp;';
-	// 					var returnStr = '<img src="' + getFileIcon(value) + '" class="sm-artifact-file-icon">';
-	// 					returnStr += '<b>' + value + '</b>';
-	// 					returnStr += '<br><br><b>Attached by:</b> ' + record.data.userName;
-	// 					returnStr += '<br><b>Description:</b> ' + record.data.description;
-	// 					returnStr += '<br><br>';
-	// 					return returnStr;
-	// 				}
-	// 			}
-	// 			,{ 
-	// 				width: 25,
-	// 				header: 'download', // not shown, used in cellclick handler
-	// 				fixed: true,
-	// 				dataIndex: 'none',
-	// 				renderer: function(value, metadata, record) {
-	// 					metadata.css = 'artifact-download';
-	// 					metadata.attr = 'ext:qtip="Download artifact"';
-	// 					return '';
-	// 				}
-	// 			}
-	// 			,{ 
-	// 				width: 25,
-	// 				header: 'delete',
-	// 				fixed: true,
-	// 				dataIndex: 'none',
-	// 				renderer: function(value, metadata, record) {
-	// 					metadata.css = 'artifact-delete';
-	// 					metadata.attr = 'ext:qtip="Unattach the artifact from this review"';
-	// 					return '';
-	// 				}
-	// 			}
-	// 		],
-	// 		loadMask: true,
-	// 		autoExpandColumn: 'attach-filename' + idAppend,
-	// 		emptyText: 'No attachments to display',
-	// 		listeners: {
-	// 			cellclick: function (grid,rowIndex,columnIndex,e) {
-	// 				//if (grid.getSelectionModel().isSelected(rowIndex)) {
-	// 					var r = grid.getStore().getAt(rowIndex);
-	// 					var header = grid.getColumnModel().getColumnHeader(columnIndex);
-	// 					switch (header) {
-	// 						case 'download':
-	// 							window.location='pl/getArtifact.pl?artId=' + r.data.artId;
-	// 							break;
-	// 						case 'delete':
-	// 							removeMap(r);
-	// 							break;
-	// 					}
-	// 				//}
-	// 			}
-	// 		}
-	// 	});
-		
-
-	// 	function removeMap(r) {
-	// 		var confirmStr='Do you want to unattach the artifact "' + r.data.filename + '"?';
-	// 		Ext.Msg.confirm("Confirm",confirmStr,function (btn,text) {
-	// 			if (btn == 'yes') {
-	// 				Ext.Ajax.request({
-	// 					url: 'pl/removeArtifactMap.pl',
-	// 					params: { 
-	// 						raId: r.data.raId
-	// 					},
-	// 					success: function(response, request) {                               
-	// 						var responseObj = Ext.util.JSON.decode(response.responseText);
-	// 						if (responseObj.success) {
-	// 							attachStore.remove(r);
-	// 							// if (attachStore.getCount() > 0) {
-	// 								// reviewForm.groupGridRecord.set('hasAttach',1);
-	// 							// } else {
-	// 								// reviewForm.groupGridRecord.set('hasAttach',0);
-	// 							// }
-	// 						}
-	// 					},
-	// 					failure: function(results, request) {
-	// 						// if (p.maskEl != undefined) {
-	// 							// p.maskEl.unmask();
-	// 						// }
-	// 						// alert('Error: review could not be updated.');
-	// 					}
-	// 				});
-	// 			}
-	// 		});
-			
-	// 	};
-
-	// /******************************************************/
-	// // End Resources Panel/Attachments
-	// /******************************************************/
-
 
 	/******************************************************/
 	// END Resources Panel
@@ -1871,6 +1857,9 @@ async function addCollectionReview ( leaf, selectedRule, selectedAsset ) {
 					{
 						region: 'center',
 						xtype: 'panel',
+						cls: 'sm-round-panel',
+						margins: { top: SM.Margin.adjacent, right: SM.Margin.adjacent, bottom: SM.Margin.bottom, left: SM.Margin.edge },
+						border: false,
 						split:true,
 						collapsible: false,
 						padding: 20,
@@ -1893,6 +1882,12 @@ async function addCollectionReview ( leaf, selectedRule, selectedAsset ) {
 					{
 						region: 'south',
 						xtype: 'tabpanel',
+						cls: 'sm-round-panel',
+						style: {
+							'background-color': '#eeeeee'
+						},
+						margins: { top: SM.Margin.adjacent, right: SM.Margin.edge, bottom: SM.Margin.bottom, left: SM.Margin.adjacent },
+						border: true,
 						id: 'resources-tab-panel' + idAppend,
 						height: '33%',
 						split:true,
@@ -1925,17 +1920,15 @@ async function addCollectionReview ( leaf, selectedRule, selectedAsset ) {
 			}
 		];
 		
-		var thisTab = Ext.getCmp('reviews-center-tab').add({
-			id: 'collectionReviewTab' + idAppend,
+		var thisTab = Ext.getCmp('main-tab-panel').add({
+			id: 'collection-review-tab' + idAppend,
 			iconCls: 'sm-stig-icon',
-			title: leaf.collectionName + " : " + leaf.benchmarkId,
+			title: apiCollection.name + " : " + leaf.benchmarkId,
 			collectionId: leaf.collectionId,
-			revId: leaf.revId,
-			revisionStr: leaf.stigRevStr,
-			benchmarkId: leaf.benchmarkId,
 			benchmarkId: leaf.benchmarkId,
 			closable:true,
 			layout: 'border',
+			border: false,
 			items: tabItems,
 			listeners: {
 			}			
@@ -1954,7 +1947,7 @@ async function addCollectionReview ( leaf, selectedRule, selectedAsset ) {
 				assetId: selectedAsset
 			}		
 		});
-		loadRevisionMenu(leaf.benchmarkId, leaf.stigRevStr, idAppend)
+		loadRevisionMenu(leaf.benchmarkId, 'latest', idAppend)
 	}
 	catch (e) {
 		alert (e.message)

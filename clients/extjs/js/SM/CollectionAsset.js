@@ -2,85 +2,6 @@
 
 Ext.ns('SM')
 
-SM.CollectionAssetTree = Ext.extend(Ext.tree.TreePanel, {
-    loadTree: async function (nodeId, cb) {
-        let match
-        match = nodeId.match(/(\d+)-project-asset-tree-root/)
-        if (match) {
-            let collectionId = parseInt(match[1])
-            let result = await Ext.Ajax.requestPromise({
-                url: `${STIGMAN.Env.apiBase}/collections/${collectionId}`,
-                method: 'GET',
-                params: {
-                  projection: 'assets'
-                }
-              })
-            let r = JSON.parse(result.response.responseText)
-            let content = r.assets.map(asset => ({
-                id: `${collectionId}-${asset.assetId}-project-asset-tree-asset-node`,
-                text: asset.name,
-                report: 'asset',
-                collectionId: collectionId,
-                assetId: asset.assetId,
-                iconCls: 'sm-asset-icon',
-                qtip: asset.name
-            })
-            )
-            cb(content, { status: true })
-            return
-        }
-        match = nodeId.match(/(\d+)-(\d+)-project-asset-tree-asset-node/)
-        if (match) {
-            let collectionId = parseInt(match[1])
-            let assetId = parseInt(match[2])
-            let result = await Ext.Ajax.requestPromise({
-                url: `${STIGMAN.Env.apiBase}/assets/${assetId}`,
-                method: 'GET',
-                params: {
-                  projection: 'stigs'
-                }
-            })
-            let r = JSON.parse(result.response.responseText)
-            let content = r.stigs.map(stig => ({
-                id: `${collectionId}-${assetId}-${stig.benchmarkId}-leaf`,
-                text: stig.benchmarkId,
-                leaf: true,
-                report: 'review',
-                iconCls: 'sm-stig-icon',
-                stigName: stig.benchmarkId,
-                assetName: r.name,
-                stigRevStr: stig.lastRevisionStr,
-                assetId: r.assetId,
-                collectionId: collectionId,
-                benchmarkId: stig.benchmarkId,
-                qtip: stig.title
-                })
-            )
-            cb(content, { status: true })
-            return
-        }
-    },
-    initComponent: function() {
-        let me = this
-        let config = {
-            root: {
-                nodeType: 'async',
-                text: 'Assets',
-                id: `${me.projectId}-project-asset-tree-root`,
-                iconCls: 'sm-asset-icon',
-                expanded: true
-            },
-            rootVisible: true,
-            loader: new Ext.tree.TreeLoader({
-                directFn: me.loadTree
-            })        
-        }
-
-        Ext.apply(this, Ext.apply(this.initialConfig, config))
-        SM.ProjectAssetTree.superclass.initComponent.call(this)
-    }
-})
-
 /* 
 @cfg collectionId 
 @cfg url
@@ -88,9 +9,13 @@ SM.CollectionAssetTree = Ext.extend(Ext.tree.TreePanel, {
 SM.CollectionAssetGrid = Ext.extend(Ext.grid.GridPanel, {
     onAssetChanged: function (apiAsset) {
         this.store.loadData(apiAsset, true) // append with replace
+        const sortState = this.store.getSortState()
+        this.store.sort(sortState.field, sortState.direction)
     },
     onAssetCreated: function (apiAsset) {
         this.store.loadData(apiAsset, true) // append with replace
+        const sortState = this.store.getSortState()
+        this.store.sort(sortState.field, sortState.direction)
     },
     initComponent: function() {
         let me = this
@@ -98,8 +23,9 @@ SM.CollectionAssetGrid = Ext.extend(Ext.grid.GridPanel, {
         let fieldsConstructor = Ext.data.Record.create([
             {name: 'assetId', type: 'string'},
             {name: 'name', type: 'string'},
+            {name: 'description', type: 'string'},
             {name: 'ip', type: 'string'},
-            {name: 'nonnetwork', type: 'boolean'},
+            {name: 'noncomputing', type: 'boolean'},
             {
                 name: 'ruleCount',
                 type: 'integer',
@@ -163,23 +89,30 @@ SM.CollectionAssetGrid = Ext.extend(Ext.grid.GridPanel, {
         let columns = [
             { 	
 				header: "Asset",
-				width: 150,
+				width: 100,
                 dataIndex: 'name',
 				sortable: true
+			},{ 	
+				header: "Description",
+				width: 150,
+                dataIndex: 'description',
+                sortable: true,
+                renderer: SM.styledEmptyRenderer
 			},{ 	
 				header: "IP",
 				width: 100,
                 dataIndex: 'ip',
-				sortable: true
-			},{ 	
-				header: "Not Networked",
-				width: 50,
-                dataIndex: 'nonnetwork',
+				sortable: true,
+                renderer: SM.styledEmptyRenderer
+			},{ 
+                xtype: 'booleancolumn',
+                trueText: '&#x2714;',
+				falseText: '',
+				header: "Non-computing",
+				width: 75,
+                dataIndex: 'noncomputing',
 				align: "center",
-				tooltip:"Is the asset connected to a network",
-				renderer: function(value, metaData, record, rowIndex, colIndex, store) {
-				  return value ? 'X' : '';
-				},
+				tooltip:"Is this a computing asset?",
 				sortable: true
 			},{ 	
 				header: "STIGs",
@@ -307,7 +240,7 @@ SM.CollectionAssetGrid = Ext.extend(Ext.grid.GridPanel, {
                         hasMenu: false,
                         gridBasename: 'Assets (grid)',
                         storeBasename: 'Assets (store)',
-                        iconCls: 'icon-save',
+                        iconCls: 'sm-export-icon',
                         text: 'Export'
                     },{
                         xtype: 'tbfill'
@@ -330,6 +263,7 @@ Ext.reg('sm-collection-asset-grid', SM.CollectionAssetGrid)
 
 SM.StigSelectionField = Ext.extend(Ext.form.ComboBox, {
     initComponent: function () {
+        let me = this
         let stigStore = new Ext.data.JsonStore({
             fields: [
                 {	name:'benchmarkId',
@@ -355,7 +289,20 @@ SM.StigSelectionField = Ext.extend(Ext.form.ComboBox, {
                 field: 'benchmarkId',
                 direction: 'ASC' // or 'DESC' (case sensitive for local sorting)
             },
-            idProperty: 'benchmarkId'
+            idProperty: 'benchmarkId',
+            listeners: {
+                load: (store, records, options) => {
+                    if (me.includeAllItem) {
+                        store.suspendEvents()
+                        let allRecord = {
+                            benchmarkId: me.includeAllItem
+                        }
+                        store.loadData( me.root ? { [me.root]: allRecord } : { allRecord }, true)
+                        store.sort('benchmarkId', 'ASC')
+                        store.resumeEvents()
+                    }
+                }
+            }
         })
         let config = {
             store: stigStore,
@@ -364,7 +311,6 @@ SM.StigSelectionField = Ext.extend(Ext.form.ComboBox, {
             valueField: 'benchmarkId',
             mode: 'local',
             forceSelection: true,
-			allowBlank: false,
 			typeAhead: true,
 			minChars: 0,
             triggerAction: this.triggerAction || 'query',
@@ -429,10 +375,10 @@ SM.StigSelectionField = Ext.extend(Ext.form.ComboBox, {
                     }
 				}
             },
-            validator: (value) => {
-                let index = this.store.indexOfId(value)
-                return (index !== -1)
-            }     
+            // validator: (value) => {
+            //     let index = this.store.indexOfId(value)
+            //     return (index !== -1)
+            // }     
         }
         Ext.apply(this, Ext.apply(this.initialConfig, config))
         SM.StigSelectionField.superclass.initComponent.call(this)
@@ -513,6 +459,10 @@ SM.AssetStigsGrid = Ext.extend(Ext.grid.GridPanel, {
                         this.grid.store.resumeEvents();
                         this.grid.getView().refresh();
                     }
+                    // Editor must remove the form fields it created; otherwise the
+                    // form validation continues to include those fields
+                    editor.removeAll(false)
+                    editor.initialized = false
                 },
                 validateedit: function (editor, changes, record, index) {
                     // Get the stigSelection combo
@@ -535,9 +485,20 @@ SM.AssetStigsGrid = Ext.extend(Ext.grid.GridPanel, {
                             mc.keys[x] = record.id
                         }
                     }
+                    editor.removeAll(false)
+                    editor.initialized = false
                 }
             }
         })
+
+        let tbar = new SM.RowEditorToolbar({
+            itemString: 'STIG',
+            editor: this.editor,
+            gridId: this.id,
+            deleteProperty: 'benchmarkId',
+            newRecord: this.newRecordConstructor
+        })
+        tbar.delButton.disable()
 
         let config = {
             isFormField: true,
@@ -555,6 +516,7 @@ SM.AssetStigsGrid = Ext.extend(Ext.grid.GridPanel, {
                 singleSelect: true,
                 listeners: {
                     selectionchange: function (sm) {
+                        tbar.delButton.setDisabled(!sm.hasSelection())
                     }
                 }
             }),
@@ -566,13 +528,7 @@ SM.AssetStigsGrid = Ext.extend(Ext.grid.GridPanel, {
             }),
             listeners: {
             },
-            tbar: new SM.RowEditorToolbar({
-                itemString: 'STIG',
-                editor: this.editor,
-                gridId: this.id,
-                deleteProperty: 'benchmarkId',
-                newRecord: this.newRecordConstructor
-            }),
+            tbar: tbar,
             getValue: function() {
                 let stigs = []
                 stigAssignedStore.data.items.forEach((i) => {
@@ -623,37 +579,64 @@ SM.AssetProperties = Ext.extend(Ext.form.FormPanel, {
                     title: '<b>Asset information</b>',
                     items: [
                         {
-                            xtype: 'textfield',
-                            fieldLabel: 'Name',
-                            width: 150,
-                            emptyText: 'Enter asset name...',
-                            allowBlank: false,
-                            name: 'name'
-                        },
-                        {
-                            xtype: 'textfield',
-                            fieldLabel: 'IP address',
-                            id: `asset-props-${idAppend}`,
-                            width: 150,
-                            emptyText: 'Enter asset IP address...',
-                            allowBlank: true,
-                            vtype: 'IPAddress',
-                            name: 'ip'
-                        },
-                        {
-                            xtype: 'checkbox',
-                            name: 'nonnetwork',
-                            value: 'off',
-                            //disabled: !(curUser.privileges.canAdmin),
-                            boxLabel: 'Not networked',
-                            handler: function (cb,checked){
-                                var tf_ip = Ext.getCmp(`asset-props-${idAppend}`)
-                                tf_ip.setDisabled(checked)
-                                tf_ip.allowBlank = false
-                                if (checked){
-                                    tf_ip.setValue('')
+                            layout: 'column',
+                            baseCls: 'x-plain',
+                            border: false,
+                            items: [
+                                {
+                                    columnWidth: .4,
+                                    layout: 'form',
+                                    border: false,
+                                    items: [
+                                        {
+                                            xtype: 'textfield',
+                                            fieldLabel: 'Name',
+                                            width: 150,
+                                            emptyText: 'Enter asset name...',
+                                            allowBlank: false,
+                                            name: 'name'
+                                        }
+                                    ]
+                                },
+                                {
+                                    columnWidth: .4,
+                                    layout: 'form',
+                                    border: false,
+                                    items: [
+                                        {
+                                            xtype: 'textfield',
+                                            fieldLabel: 'IP address',
+                                            width: 130,
+                                            emptyText: 'Enter asset IP address...',
+                                            allowBlank: true,
+                                            vtype: 'IPAddress',
+                                            name: 'ip'
+                                        }
+                                    ]
+                                },
+                                {
+                                    columnWidth: .2,
+                                    layout: 'form',
+                                    border: false,
+                                    hideLabels: true,
+                                    items: [
+                                        {
+                                            xtype: 'checkbox',
+                                            name: 'noncomputing',
+                                            checked: false,
+                                            boxLabel: 'Non-computing'
+                                        }
+                                    ]
                                 }
-                            }
+                            ]
+                        },
+                        {
+                            xtype: 'textfield',
+                            fieldLabel: 'Description',
+                            anchor: '100%',
+                            emptyText: 'Enter asset description...',
+                            allowBlank: true,
+                            name: 'description'
                         },
                         {
                             xtype: 'sm-metadata-grid',
@@ -672,16 +655,10 @@ SM.AssetProperties = Ext.extend(Ext.form.FormPanel, {
                 {
                     xtype: 'fieldset',
                     title: '<b>STIG Assignments</b>',
-                    anchor: "100% -270",
+                    anchor: "100% -240",
                     layout: 'fit',
                     items: [
                         this.stigGrid
-                        // {
-                        //     xtype: 'sm-asset-stig-grid',
-                        //     name: 'stigGrants',
-                        //     fieldLabel: 'STIGs',
-                        //     // anchor: '100%'
-                        // }
                     ]
                 }
 
@@ -695,6 +672,10 @@ SM.AssetProperties = Ext.extend(Ext.form.FormPanel, {
 
         Ext.apply(this, Ext.apply(this.initialConfig, config))
         SM.AssetProperties.superclass.initComponent.call(this)
+
+        this.getForm().addListener('beforeadd', (fp, c, i) => {
+            let one = c
+        })
 
         this.getForm().getFieldValues = function(dirtyOnly, getDisabled){
             // Override to support submitValue boolean
@@ -739,6 +720,8 @@ SM.AssetProperties = Ext.extend(Ext.form.FormPanel, {
 async function showAssetProps( assetId, initialCollectionId ) {
     try {
         let assetPropsFormPanel = new SM.AssetProperties({
+            id: 'dev-test',
+            padding: '10px 15px 10px 15px',
             initialCollectionId: initialCollectionId,
             btnHandler: async function(){
                 try {
@@ -765,7 +748,7 @@ async function showAssetProps( assetId, initialCollectionId ) {
                     }
                 }
                 catch (e) {
-                    alert(e.stack)
+                    alert(e.message)
                 }
             }
         })
@@ -786,6 +769,7 @@ async function showAssetProps( assetId, initialCollectionId ) {
             buttonAlign:'right',
             items: assetPropsFormPanel
         });
+
         
         appwindow.render(document.body)
         // await assetPropsFormPanel.initPanel()

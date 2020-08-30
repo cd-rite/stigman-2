@@ -14,6 +14,7 @@ paths:
   /collections:
     parameters:
       - $ref: '#/components/parameters/ElevateQuery'
+      - $ref: '#/components/parameters/CollectionsProjectionQuery'
     get:
       tags:
         - Collection
@@ -32,7 +33,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/Collection'
+                  $ref: '#/components/schemas/CollectionsProjected'
         default:
           description: unexpected error
           content:
@@ -251,6 +252,91 @@ paths:
       security:
         - oauth:
             - 'stig-manager:collection:read'
+  '/collections/{collectionId}/grants/{userId}/access':
+    parameters:
+      - $ref: '#/components/parameters/ElevateQuery'
+      - $ref: '#/components/parameters/CollectionIdPath'
+      - $ref: '#/components/parameters/UserIdPath'
+    get:
+      tags:
+        - Collection
+      summary: UNIMPLEMENTED Return an accessLevel = 1 User's access to the specified Collection
+      operationId: geStigAssetsByCollectionUser
+      responses:
+        '200':
+          description: CollectionGrant response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StigAssetProjected'
+        default:
+          description: unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+        - oauth:
+            - 'stig-manager:collection:read'
+    put:
+      tags:
+        - Collection
+      summary: UNIMPLEMENTED Set all of an accessLevel = 1 User's access to the specified Collection
+      operationId: setStigAssetsByCollectionUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/StigAsset'
+      responses:
+        '200':
+          description: CollectionProjected response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionProjected'
+        default:
+          description: unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+        - oauth:
+            - 'stig-manager:collection'
+  '/collections/{collectionId}/status':
+    parameters:
+      - $ref: '#/components/parameters/CollectionIdPath'
+    get:
+      tags:
+        - Collection
+      summary: Return the status statistics for the specified Collection
+      operationId: getStatusByCollection
+      responses:
+        '200':
+          description: CollectionStatus response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CollectionStatus'
+        default:
+          description: unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+        - oauth:
+            - 'stig-manager:collection:read'
+
+
   '/collections/{collectionId}/stigs':
     parameters:
       - $ref: '#/components/parameters/ElevateQuery'
@@ -453,7 +539,7 @@ paths:
       tags:
         - Asset
       summary: Return an Asset's STIG assignments
-      operationId: getAssetStigs
+      operationId: getStigsByAsset
       responses:
         '200':
           description: STIGs response
@@ -473,8 +559,8 @@ paths:
     put:
       tags:
         - Asset
-      summary: Set all the STIG assignments of an Asset
-      operationId: setAssetStigs
+      summary: UNIMPLEMENTED Set all the STIG assignments of an Asset
+      operationId: attachStigsToAsset
       requestBody:
         required: true
         content:
@@ -504,7 +590,7 @@ paths:
       tags:
         - Asset
       summary: Delete all STIG assignments to an Asset
-      operationId: deleteAssetStigs
+      operationId: removeStigsFromAsset
       responses:
         '200':
           description: AssetStigs response
@@ -530,8 +616,8 @@ paths:
     put:
       tags:
         - Asset
-      summary: Assign a STIG to an Asset
-      operationId: setAssetStig
+      summary: UNIMPLEMENTED Assign a STIG to an Asset
+      operationId: attachStigToAsset
       responses:
         '200':
           description: AssetProjected response
@@ -552,7 +638,7 @@ paths:
       tags:
         - Asset
       summary: Delete a STIG assignment to an Asset
-      operationId: deleteAssetStig
+      operationId: removeStigFromAsset
       responses:
         '200':
           description: AssetProjected response
@@ -569,7 +655,7 @@ paths:
       security:
         - oauth:
             - 'stig-manager:collection'
-  '/assets/{assetId}/stigs/{benchmarkId}/grants':
+  '/assets/{assetId}/stigs/{benchmarkId}/users':
     parameters:
       - $ref: '#/components/parameters/ElevateQuery'
       - $ref: '#/components/parameters/AssetIdPath'
@@ -577,7 +663,7 @@ paths:
     get:
       tags:
         - Asset
-      summary: Return all the grants to a STIG-Asset combination
+      summary: Return accessLevel = 1 Users granted access to this STIG-Asset combination
       operationId: getAssetStigGrants
       responses:
         '200':
@@ -600,7 +686,7 @@ paths:
     put:
       tags:
         - Asset
-      summary: Set all the grants to a STIG-Asset combination
+      summary: UNIMPLEMENTED Set all the accessLevel = 1 Users granted access to this STIG-Asset combination
       operationId: setAssetStigGrants
       responses:
         '200':
@@ -624,7 +710,7 @@ paths:
     delete:
       tags:
         - Asset
-      summary: Delete all the grants to a STIG-Asset combination
+      summary: UNIMPLEMENTED Revoke all accessLevel = 1 User access to this STIG-Asset combination
       operationId: deleteAssetStigGrants
       responses:
         '200':
@@ -645,7 +731,7 @@ paths:
         - oauth:
             - 'stig-manager:collection'
 
-  '/assets/{assetId}/stigs/{benchmarkId}/grants/{userId}':
+  '/assets/{assetId}/stigs/{benchmarkId}/users/{userId}':
     parameters:
       - $ref: '#/components/parameters/ElevateQuery'
       - $ref: '#/components/parameters/AssetIdPath'
@@ -654,7 +740,7 @@ paths:
     put:
       tags:
         - Asset
-      summary: Set a grant to a STIG-Asset combination
+      summary: UNIMPLEMENTED Grant an accessLevel = 1 User access to a STIG-Asset combination
       operationId: setAssetStigGrant
       responses:
         '200':
@@ -677,7 +763,7 @@ paths:
     delete:
       tags:
         - Asset
-      summary: Delete a grant to a STIG-Asset combination
+      summary: UNIMPLEMENTED Revoke an accessLevel = 1 User's access to a STIG-Asset combination
       operationId: deleteAssetStigGrant
       responses:
         '200':
@@ -768,6 +854,8 @@ paths:
         - $ref: '#/components/parameters/ReviewActionQuery'
         - $ref: '#/components/parameters/ReviewStatusQuery'
         - $ref: '#/components/parameters/RuleIdQuery'
+        - $ref: '#/components/parameters/GroupIdQuery'
+        - $ref: '#/components/parameters/CciQuery'
         - $ref: '#/components/parameters/UserIdQuery'
         - $ref: '#/components/parameters/AssetIdQuery'
         - $ref: '#/components/parameters/BenchmarkIdQuery'
@@ -1315,7 +1403,7 @@ paths:
         - Collection
       summary: Get the Assets in a Collection attached to a STIG
       description: ''
-      operationId: getStigAssetsByBenchmarkId
+      operationId: getAssetsByStig
       responses:
         '200':
           description: Revision response
@@ -1324,7 +1412,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/StigAssetProjected'
+                  $ref: '#/components/schemas/AssetBasic'
         default:
           description: unexpected error
           content:
@@ -1340,7 +1428,7 @@ paths:
         - Collection
       summary: Set the Assets mapped to a STIG
       description: ''
-      operationId: setStigAssetsByBenchmarkId
+      operationId: attachAssetsToStig
       requestBody:
         required: true
         description: A list of assetIds from the specified Collection
@@ -1358,7 +1446,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/StigAssetProjected'
+                  $ref: '#/components/schemas/AssetBasic'
         default:
           description: unexpected error
           content:
@@ -1856,10 +1944,13 @@ components:
           nullable: false
         collection:
           $ref: '#/components/schemas/CollectionBasic'
+        description:
+          type: string
+          nullable: true
         ip:
           type: string
           nullable: true
-        nonnetwork:
+        noncomputing:
           type: boolean
         metadata:
           type: object
@@ -1870,12 +1961,15 @@ components:
           type: string
         name:
           type: string
+        # collection:
+        #     $ref: '#/components/schemas/CollectionBasic'
     AssetCreateOrReplace:
       required:
         - name
         - collectionId
+        - description
         - ip
-        - nonnetwork
+        - noncomputing
         - metadata
         - stigs
       additionalProperties: false
@@ -1886,10 +1980,13 @@ components:
         collectionId:
           description: The collectionId mapped to this Asset
           type: string
+        description:
+          type: string
+          nullable: true
         ip:
           type: string
           nullable: true
-        nonnetwork:
+        noncomputing:
           type: boolean
         metadata:
           type: object
@@ -1949,10 +2046,13 @@ components:
         collectionId:
           type: string
           nullable: false
+        description:
+          type: string
+          nullable: true
         ip:
           type: string
           nullable: true
-        nonnetwork:
+        noncomputing:
           type: boolean
         metadata:
           type: object
@@ -2352,6 +2452,8 @@ components:
           $ref: '#/components/schemas/CollectionWorkflow'
         metadata:
           type: object
+        created:
+          type: string
     CollectionBasic:
       type: object
       properties:
@@ -2364,7 +2466,7 @@ components:
     CollectionCreateOrReplace:
       required:
         - name
-        - description
+        # - description
         - workflow
         - metadata
         - grants
@@ -2382,12 +2484,7 @@ components:
         grants:
           type: array
           items:
-            type: object
-            properties:
-              userId:
-                type: string
-              accessLevel:
-                type: integer
+            $ref: '#/components/schemas/UserGrant'
     CollectionGrant:
       type: object
       required:
@@ -2399,51 +2496,6 @@ components:
           type: string
         accessLevel:
           type: integer
-    CollectionGrantLevel1:
-      type: object
-      required:
-        - collectionId
-        - accessLevel
-        - stigReviews
-      properties:
-        collectionId:
-          type: string
-        accessLevel:
-          type: integer
-          minimum: 1
-          maximum: 1
-        stigAssets:
-          type: array
-          items:
-            type: object
-            properties:
-              benchmarkId:
-                type: string
-              assetId:
-                type: string
-    CollectionGrantLevel1Projected:
-      type: object
-      properties:
-        collectionId:
-          type: string
-        accessLevel:
-          type: integer
-          minimum: 1
-          maximum: 1
-        stigAssets:
-          type: array
-          items:
-            type: object
-            properties:
-              benchmarkId:
-                type: string
-              asset:
-                type: object
-                properties:
-                  assetId:
-                    type: string
-                  name:
-                    type: string
     CollectionGrantProjected:
       type: object
       additionalProperties: false
@@ -2474,6 +2526,60 @@ components:
               type: array
               items:
                 $ref: '#/components/schemas/UserGrantProjected'
+    CollectionsProjected:
+      allOf:
+        - $ref: '#/components/schemas/Collection'
+        - type: object
+          properties:
+            owners:
+              type: array
+              items:
+                $ref: '#/components/schemas/UserBasic'
+            statistics:
+              type: object
+    CollectionStatus:
+      type: object
+      properties:
+        assetId:
+          type: string
+        assetName:
+          type: string
+        benchmarkId:
+          type: string
+        minTs:
+          type: string
+        maxTs:
+          type: string
+        rules:
+          $ref: '#/components/schemas/CollectionStatusCount'
+        findings:
+          type: object
+          properties:
+            low:
+              type: integer
+            medium:
+              type: integer
+            high:
+              type: integer
+        status:
+          type: object
+          properties:
+            saved:
+              $ref: '#/components/schemas/CollectionStatusCount'
+            submitted:
+              $ref: '#/components/schemas/CollectionStatusCount'
+            rejected:
+              $ref: '#/components/schemas/CollectionStatusCount'
+            accepted:
+              $ref: '#/components/schemas/CollectionStatusCount'
+        
+    CollectionStatusCount:
+      type: object
+      properties:
+        total:
+          type: integer
+        auto:
+          type: integer
     CollectionUpdate:
       additionalProperties: false
       type: object
@@ -2589,17 +2695,25 @@ components:
       properties:
         ts:
           type: string
-        activityType:
+        result:
+          $ref: '#/components/schemas/ReviewResult'
+        resultComment:
           type: string
-        columnName:
+          nullable: true
+        action:
+          $ref: '#/components/schemas/ReviewAction'
+        actionComment:
           type: string
-        oldValue:
-          type: string
-        newValue:
-          type: string
+          nullable: true
+        autoResult:
+          type: boolean
+        status:
+          $ref: '#/components/schemas/ReviewStatus'
         userId:
           type: string
         username:
+          type: string
+        rejectText:
           type: string
     ReviewProjected:
       allOf:
@@ -2780,34 +2894,25 @@ components:
           type: string
         title:
           type: string
+        ruleCount:
+          type: integer
     StigAsset:
       type: object
-      properties:
-        asset:
-          $ref: '#/components/schemas/AssetBasic'
-    StigAssetBasic:
-      type: object
+      required:
+        - benchmarkId
+        - assetId
       properties:
         benchmarkId:
           type: string
         assetId:
           type: string
-    StigAssetExtended:
+    StigAssetProjected:
       type: object
       properties:
         benchmarkId:
           type: string
         asset:
           $ref: '#/components/schemas/AssetBasic'
-    StigAssetProjected:
-      allOf:
-        - $ref: '#/components/schemas/AssetBasic'
-        - type: object
-          properties:
-            userGrants:
-              type: array
-              items:
-                $ref: '#/components/schemas/UserBasic'
     User:
       type: object
       properties:
@@ -2822,6 +2927,12 @@ components:
           type: string
         metadata:
           type: object
+        created:
+          type: string
+          readOnly: true
+        lastAccess:
+          type: string
+          readOnly: true
     UserBasic:
       type: object
       properties:
@@ -2909,6 +3020,18 @@ components:
               type: array
               items:
                 $ref: '#/components/schemas/CollectionGrantProjected'
+        - type: object
+          properties:
+            statistics:
+              $ref: '#/components/schemas/UserStatistics'
+    UserStatistics:
+      type: object
+      properties:
+        created:
+          type: string
+        lastAccess:
+          type: string
+
     UserUpdate:
       type: object
       properties:
@@ -2973,6 +3096,12 @@ components:
       in: path
       description: A path parameter that indentifies a CCI
       required: true
+      schema:
+        type: string
+    CciQuery:
+      name: cci
+      in: query
+      description: A query parameter that indentifies a CCI
       schema:
         type: string
     ChecklistProjectionQuery:
@@ -3095,8 +3224,24 @@ components:
           type: string
           enum:
             - assets
-            - stigs
             - grants
+            - owners
+            - statistics
+            - stigs
+    CollectionsProjectionQuery:
+      name: projection
+      in: query
+      description: |
+        Additional properties to include in the response.
+      style: form
+      explode: true
+      schema:
+        type: array
+        items:
+          type: string
+          enum:
+            - owners
+            - statistics
     CollectionWorkflowQuery:
       name: workflow
       in: query
@@ -3263,15 +3408,16 @@ components:
         items:
           type: string
           enum:
-            - privileges
             - collectionGrants
+            - privileges
+            - statistics
   securitySchemes:
     oauth:
       type: oauth2
       flows:
         implicit:
           authorizationUrl: >-
-            http://192.168.1.155:8080/auth/realms/stigman/protocol/openid-connect/auth
+            http://localhost:8080/auth/realms/stigman/protocol/openid-connect/auth
           scopes:
             stig-manager: Top-accessLevel scope
             'stig-manager:stig': Full access to the STIG collection

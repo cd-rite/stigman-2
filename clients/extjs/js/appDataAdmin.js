@@ -1,11 +1,14 @@
 function addAppDataAdmin() {
 
-  let apiPanel = new Ext.form.FormPanel({
-    baseCls: 'x-plain',
-    autoHeight: true,
+  let apiPanel = new Ext.Panel({
+    // baseCls: 'x-plain',
+		cls: 'sm-round-panel',
+		margins: { top: SM.Margin.top, right: SM.Margin.edge, bottom: SM.Margin.bottom, left: SM.Margin.edge },
+    region: 'center',
+    // autoHeight: true,
     labelWidth: 1,
     hideLabel: true,
-    width: 500,
+    // width: 500,
     padding: 10,
     defaults: {
       anchor: '100%',
@@ -208,11 +211,13 @@ function addAppDataAdmin() {
   }
 
 
-  let thisTab = Ext.getCmp('reviews-center-tab').add({
+  let thisTab = Ext.getCmp('main-tab-panel').add({
     id: 'appdata-admin-tab',
     iconCls: 'sm-database-save-icon',
     title: 'Application Data',
     closable: true,
+    layout: 'border',
+    border: false,
     items: [apiPanel]
   })
   thisTab.show();

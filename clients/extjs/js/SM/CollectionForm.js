@@ -33,9 +33,9 @@ Ext.reg('sm-workflow-combo', SM.WorkflowComboBox);
 
 SM.AccessLevelStrings = [
     'Undefined',
-    'Assignments',
-    'All resources',
-    'Configuration',
+    'Restricted',
+    'Full',
+    'Manage',
     'Owner'
 ]
 
@@ -115,6 +115,14 @@ SM.MetadataGrid = Ext.extend(Ext.grid.GridPanel, {
             width: 80
         })
         let writer = new Ext.data.DataWriter()
+        let bbar = new SM.RowEditorToolbar({
+            itemString: 'key',
+            editor: this.editor,
+            gridId: this.id,
+            deleteProperty: 'key',
+            newRecord: this.newRecordConstructor
+        })
+        bbar.delButton.disable()
         let config = {
             //title: this.title || 'Parent',
             isFormField: true,
@@ -153,20 +161,9 @@ SM.MetadataGrid = Ext.extend(Ext.grid.GridPanel, {
             sm: new Ext.grid.RowSelectionModel ({
                 singleSelect: true,
                 listeners: {
-                    // rowselect: function(sm,index,record) {
-                    //     // If the editor is active the new record will be a phantom
-                    //     if (record.phantom !== true) {
-                    //         let loadObj = {
-                    //             params: {}
-                    //         }
-                    //         //loadObj.params[sm.grid.child.store.idProperty] = record.data[sm.grid.child.store.idProperty]
-                    //         loadObj.params[sm.grid.store.idProperty] = record.data[sm.grid.store.idProperty]
-                    //         // clear selections from control grid
-                    //         sm.grid.child.child.apiResponse([{}])
-                    //         sm.grid.child.store.removeAll(true)
-                    //         sm.grid.child.store.load(loadObj)
-                    //     }
-                    // }
+                    selectionchange: function (sm) {
+                        bbar.delButton.setDisabled(!sm.hasSelection())
+                    }
                 }
             }),
             cm: new Ext.grid.ColumnModel ({
@@ -208,13 +205,7 @@ SM.MetadataGrid = Ext.extend(Ext.grid.GridPanel, {
                     }
                 ]   
             }),
-            bbar: new SM.RowEditorToolbar({
-                itemString: 'key',
-                editor: this.editor,
-                gridId: this.id,
-                deleteProperty: 'key',
-                newRecord: this.newRecordConstructor
-            }),
+            bbar: bbar,
             getValue: function() {
                 let value = {}
                 this.store.data.items.forEach((i) => {
@@ -438,6 +429,10 @@ SM.UserGrantsGrid = Ext.extend(Ext.grid.GridPanel, {
                         this.grid.store.resumeEvents();
                         this.grid.getView().refresh();
                     }
+                    // Editor must remove the form fields it created; otherwise the
+                    // form validation continues to include those fields
+                    editor.removeAll(false)
+                    editor.initialized = false
                 },
                 afteredit: function (editor, changes, record, index) {
                     // "Save" the record by reconfiguring the store's data collection
@@ -459,11 +454,32 @@ SM.UserGrantsGrid = Ext.extend(Ext.grid.GridPanel, {
 
             }
         })
+        const tbar = new SM.RowEditorToolbar({
+            itemString: 'Grant',
+            editor: this.editor,
+            gridId: this.id,
+            deleteProperty: 'userId',
+            newRecord: this.newRecordConstructor
+        })
+        if (this.showAccessBtn) {
+            tbar.addSeparator()
+            this.accessBtn = tbar.addButton({
+                iconCls: 'sm-asset-icon',
+                disabled: true,
+                text: 'Restricted User access list ...',
+                handler: function() {
+                    var r = me.getSelectionModel().getSelected();
+                    Ext.getBody().mask('Getting access list for ' + r.get('username') + '...');
+                    showUserAccess(me.collectionId, r.get('userId'));
+                }
+            })    
+        }
+        
         const config = {
             //title: this.title || 'Parent',
             isFormField: true,
             name: 'grants',
-            allowBlank: true,
+            allowBlank: false,
             layout: 'fit',
             height: 150,
             plugins: [this.editor],
@@ -474,7 +490,10 @@ SM.UserGrantsGrid = Ext.extend(Ext.grid.GridPanel, {
             sm: new Ext.grid.RowSelectionModel({
                 singleSelect: true,
                 listeners: {
-                    selectionchange: function (sm) {
+                    rowselect: function (sm, index, record) {
+                        if (me.showAccessBtn) {
+                            me.accessBtn.setDisabled(record.data.accessLevel != 1)
+                        }
                     }
                 }
             }),
@@ -486,13 +505,7 @@ SM.UserGrantsGrid = Ext.extend(Ext.grid.GridPanel, {
             }),
             listeners: {
             },
-            tbar: new SM.RowEditorToolbar({
-                itemString: 'Grant',
-                editor: this.editor,
-                gridId: this.id,
-                deleteProperty: 'userId',
-                newRecord: this.newRecordConstructor
-            }),
+            tbar: tbar,
 
             getValue: function() {
                 let grants = []
@@ -512,11 +525,24 @@ SM.UserGrantsGrid = Ext.extend(Ext.grid.GridPanel, {
                 }))
                 grantStore.loadData(data)
             },
-            markInvalid: function() {},
-            clearInvalid: function() {},
-            isValid: () => true,
+            validator: function (v) {
+                let one = 1
+            },
+            markInvalid: function() {
+                let one = 1
+            },
+            clearInvalid: function() {
+                let one = 1
+            },
+            isValid: function () {
+                const value = me.getValue()
+                const owners = value.filter( g => g.accessLevel === 4)
+                return owners.length > 0
+            },
             getName: () => this.name,
-            validate: () => true
+            validate: function () {
+                let one = 1
+            }
         }
 
         Ext.apply(this, Ext.apply(this.initialConfig, config))
@@ -529,6 +555,7 @@ SM.CollectionForm = Ext.extend(Ext.form.FormPanel, {
     initComponent: function() {
         let config = {
             baseCls: 'x-plain',
+            bodyStyle:'padding:10px 10px 10px 10px;',
             border: false,
             labelWidth: 100,
             monitorValid: true,
@@ -650,6 +677,12 @@ SM.CollectionPanel = Ext.extend(Ext.form.FormPanel, {
                 }
             }            
         })
+        let delButton = new Ext.Button({
+            iconCls: 'icon-del',
+            // cls: 'sm-bare-button',
+            width: 25,
+            border: false
+        })
         let workflowCombo = new SM.WorkflowComboBox({
             fieldLabel: 'Workflow',
             name: 'workflow',
@@ -705,10 +738,23 @@ SM.CollectionPanel = Ext.extend(Ext.form.FormPanel, {
                 }
             }
 
-        }) 
+        })
+        let firstItem = nameField
+        if (this.allowDelete) {
+            nameField.flex = 1
+            firstItem = {
+                xtype: 'compositefield',
+                items: [
+                    nameField,
+                    delButton
+                ]
+            }
+        }
         let config = {
             // baseCls: 'x-plain',
             // border: false,
+            title: 'Collection properties',
+            layout: 'form',
             labelWidth: 100,
             // monitorValid: true,
             getFieldValues: function (dirtyOnly) {
@@ -733,15 +779,9 @@ SM.CollectionPanel = Ext.extend(Ext.form.FormPanel, {
                 return o
             },
             items: [
-                {
-                    xtype: 'fieldset',
-                    title: '<b>Collection properties</b>',
-                    items: [
-                        nameField,
-                        workflowCombo,
-                        metadataGrid
-                    ]
-                }
+                firstItem,
+                workflowCombo,
+                metadataGrid
             ],
             // buttons: [{
             //     text: this.btnText || 'Save',

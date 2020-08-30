@@ -45,6 +45,9 @@ function addStigAdmin() {
 
 	var stigGrid = new Ext.grid.GridPanel({
 		id: 'stigGrid',
+		cls: 'sm-round-panel',
+		margins: { top: SM.Margin.top, right: SM.Margin.edge, bottom: SM.Margin.bottom, left: SM.Margin.edge },
+		region: 'center',
 		store: stigStore,
 		stripeRows:true,
 		sm: new Ext.grid.RowSelectionModel({ singleSelect: true }),
@@ -122,7 +125,7 @@ function addStigAdmin() {
 			{
 				xtype: 'tbbutton',
 				id: 'stigGrid-csvBtn',
-				iconCls: 'icon-save',
+				iconCls: 'sm-export-icon',
 				tooltip: 'Download this table\'s data as Comma Separated Values (CSV)',
 				width: 20,
 				handler: function(btn){
@@ -144,12 +147,12 @@ function addStigAdmin() {
 		loadMask: true
 	});
 
-	var thisTab = Ext.getCmp('reviews-center-tab').add({
+	var thisTab = Ext.getCmp('main-tab-panel').add({
 		id: 'stig-admin-tab',
 		iconCls: 'sm-stig-icon',
 		title: 'STIG checklists',
 		closable:true,
-		layout: 'fit',
+		layout: 'border',
 		items: [stigGrid]
 		});
 
@@ -461,5 +464,4 @@ function addStigAdmin() {
 	// Show the tab
 	thisTab.show();
 	stigGrid.getStore().load();
-	taStore.load();
 } // end addStigAdmin()
