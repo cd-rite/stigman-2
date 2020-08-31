@@ -1,3 +1,4 @@
+[![Board Status](https://dev.azure.com/cdaley-1/440f7e3f-7efc-4b5a-8221-ca3e5320137b/09f87aa1-e3be-4a4f-ba19-b9d4f0d56212/_apis/work/boardbadge/05430364-9a34-42f3-9d0a-1f217dc587fe)](https://dev.azure.com/cdaley-1/440f7e3f-7efc-4b5a-8221-ca3e5320137b/_boards/board/t/09f87aa1-e3be-4a4f-ba19-b9d4f0d56212/Microsoft.RequirementCategory)
 # STIG Manager
 
 STIG Manager is an API and Web client for managing the assessment of Information Systems for compliance with [security checklists](https://public.cyber.mil/stigs/) published by the United States (U.S.) Defense Information Systems Agency (DISA). STIG Manager supports DISA checklists [distributed](https://public.cyber.mil/stigs/downloads/) as either a Security Technical Implementation Guide (STIG) or a Security Requirements Guide (SRG).
