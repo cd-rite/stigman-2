@@ -6,11 +6,11 @@ TOC:
 3. [Reports](#reports)
 4. [Data Organization](#data-org)
 
-## Introduction <a name="introduction"></a>
+## Introduction
 
  #### Terminology
 
-## STIGMan Layout <a name="layout"></a>
+## STIGMan Layout 
  ### Home Panel
  ### Nav Panel
   #### Nav Tree
@@ -37,7 +37,7 @@ TOC:
 #### Collections
 #### STIGs
 
-## Data Organization <a name="data-org"></a>
+## Data Organization
 ### Collections
 ### Assets
 ### STIGs
