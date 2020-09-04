@@ -1,14 +1,9 @@
 # User GUIDE
 
-TOC:
-1. [Introduction](#introduction)
-2. [STIGMAN Layout](#layout)
-3. [Reports](#reports)
-4. [Data Organization](#data-org)
-
 ## Introduction
-
+Some Intro Text
  #### Terminology
+ Some explanation of the words!
 
 ## STIGMan Layout 
  ### Home Panel
@@ -24,7 +19,7 @@ TOC:
   #### Rule Info Panel
   #### Evaluation Panel
   #### Resources Panel
- ### Reports <a name="reports"></a>
+ ### Reports
   #### Findings Report
   #### Status Report
  ### Collection Management
