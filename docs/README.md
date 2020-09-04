@@ -1,4 +1,5 @@
 # User GUIDE
+[These Docs on GitHub Pages](https://cd-rite.github.io/stigman-2/#/)
 
 ## Introduction
 Some Intro Text
