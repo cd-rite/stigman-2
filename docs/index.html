@@ -15,7 +15,9 @@
       //...
       loadSidebar: true,
       subMaxLevel: 2
-
+      plugins: [
+        EditOnGithubPlugin.create(docBase, docEditBase, title)
+      ]
     }
   </script>
   <script src="//cdn.jsdelivr.net/npm/docsify@4"></script>
