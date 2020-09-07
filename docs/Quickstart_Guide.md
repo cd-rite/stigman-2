@@ -9,12 +9,12 @@ Click
 1. By default, most users will have the Collection Creator role, allowing them to create their own Collection of Assets and their STIGs, and to provide access to them to other users in the system.
 2. After logging into the system, click the +Create Collection item in the Nav Tree on the left.
 
-[<img src="assets/images/createCollectionNavTree.png" alt="drawing" width="600"/>](assets/images/CreateCollectionPopup.png ':target=_self')
+[<img src="assets/images/createCollectionNavTree.png" alt="drawing" width="600"/>](assets/images/CreateCollectionNavTree.png ':ignore :target=_self')
 <!-- 3. ![Create Collection Nav Tree](assets/images/createCollectionNavTree.png=250x) -->
 
 1. You will be prompted for your collection name, and some other info. Only a Collection name and Owner are required. (Your user is prepopulated as an owner.)  Click "Save" when finished.
 
-[<img src="assets/images/CreateCollectionPopup.png" alt="drawing" width="600"/>](assets/images/CreateCollectionPopup.png ':target=_self')
+[<img src="assets/images/CreateCollectionPopup.png" alt="drawing" width="600"/>](assets/images/CreateCollectionPopup.png ':ignore :target=_self')
 
 ## Create Assets in your Collection
 
@@ -26,7 +26,7 @@ Click
 2. Alternately, STIG assignments can be made by by double-clicking on a STIG in the Collection Management screen. 
 3. STIG Assignments can also be made automatically by importing STIG Viewer .ckl or XCCDF  files using the "Import CKL or SCAP..." button.
 
-[<img src="assets/images/AssetCreationPopup.png" alt="drawing" width="600"/>](assets/images/AssetCreationPopup.png ':target=_self')
+[<img src="assets/images/AssetCreationPopup.png" alt="drawing" width="600"/>](assets/images/AssetCreationPopup.png ':ignore :target=_self')
 1. Grant other users access to your entire collection or just specific Asset/STIG combinations.
 * The Assets you create a rx the STIGs you assign them are presented in the Collection Management panel as well as the Nav Tree entry for that collection  on the left.
 
@@ -35,7 +35,7 @@ Click
 1. Grant other users access to your entire collection or just specific Asset/STIG combinations.
 
  
- [<img src="assets/images/CollectionConfig_Populated.png" alt="drawing" width="600"/>](assets/images/CollectionConfig_Populated.png ':target=_self')
+ [<img src="assets/images/CollectionConfig_Populated.png" alt="drawing" width="600"/>](assets/images/CollectionConfig_Populated.png ':ignore :target=_self')
 
  ## Evaluate Asset STIG compliance
 
