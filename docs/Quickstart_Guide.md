@@ -9,7 +9,7 @@ Click
 1. By default, most users will have the Collection Creator role, allowing them to create their own Collection of Assets and their STIGs, and to provide access to them to other users in the system.
 2. After logging into the system, click the +Create Collection item in the Nav Tree on the left.
 
-[<img src="assets/images/createCollectionNavTree.png" alt="drawing" width="600"/>](/assets/images/CreateCollectionPopup.png ':target=_self')
+[<img src="assets/images/createCollectionNavTree.png" alt="drawing" width="600"/>](assets/images/CreateCollectionPopup.png ':target=_self')
 <!-- 3. ![Create Collection Nav Tree](assets/images/createCollectionNavTree.png=250x) -->
 
 1. You will be prompted for your collection name, and some other info. Only a Collection name and Owner are required. (Your user is prepopulated as an owner.)  Click "Save" when finished.
