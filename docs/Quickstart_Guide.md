@@ -2,17 +2,15 @@
 
 ## Create your first Collection
 
-You may have already been given access to some Collections in STIGMan.
-If Nav Tree is populated skip collection creation section?
-Nav Tree on left.
-Click 
-1. By default, most users will have the Collection Creator role, allowing them to create their own Collection of Assets and their STIGs, and to provide access to them to other users in the system.
-2. After logging into the system, click the +Create Collection item in the Nav Tree on the left.
+By default, most users will have the Collection Creator role, allowing them to create their own Collection of Assets and their STIGs, and to provide access to them to other users in the system.
+
+1. After logging into the system, click the +Create Collection item in the Nav Tree on the left.
 
 [<img src="assets/images/CreateCollectionNavTree.png" alt="drawing" width="600"/>](assets/images/CreateCollectionNavTree.png ':ignore :target=_self')
-<!-- 3. ![Create Collection Nav Tree](assets/images/reateCollectionNavTree.png=250x) -->
 
-1. You will be prompted for your collection name, and some other info. Only a Collection name and Owner are required. (Your user is prepopulated as an owner.)  Click "Save" when finished.
+* You may have already been given access to some Collections in STIGMan, or you may not have the Collection Creator privilege. If your Nav Tree is already sufficiently populated, feel free to skip to the Evaluate Asset STIG Compliance section.
+
+2. You will be prompted for your collection name, and some other info. Only a Collection name and Owner are required. (Your user is prepopulated as an owner.)  Click "Save" when finished.
 
 [<img src="assets/images/CreateCollectionPopup.png" alt="drawing" width="600"/>](assets/images/CreateCollectionPopup.png ':ignore :target=_self')
 
