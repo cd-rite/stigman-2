@@ -105,7 +105,7 @@ Status presents an overall summary of evaluations, showing completion statuses a
  [<img src="assets/images/FindingsReport.png" alt="drawing" width="600"/>](assets/images/FindingsReport.png ':ignore :target=_self')
 
 #### Status Report
- 1. Click the Status report.
+ 1. Click the Status report in the Nav Tree.
     * The Status report provides information about the progress of STIG Evaluations. By default it will list each Asset, and their attached STIGs. 
  2. Click the shield icon in the Grouping box in the top left of the Status report. 
     * The Status report will pivot to list each STIG that is a part of this Collection, and each Asset that has that STIG attached to it.
