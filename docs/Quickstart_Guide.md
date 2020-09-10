@@ -114,10 +114,9 @@ Status presents an overall summary of evaluations, showing completion statuses a
  [<img src="assets/images/StatusReport.png" alt="drawing" width="600"/>](assets/images/StatusReport.png ':ignore :target=_self')
 
 
-Manual Evaluations for this rule are performed int he bottom right panel
-- Rule evaluations must include a Result and a Result comment in order to be submitted for review to the Collection owner (this may be you). Open findings also require an Action and Action comment to be submitted.
-- The Resources panel in the top right presents other useful info, such as Evaluations you have performed for other assets with this Rule, as well as the history fo the evaluation.  You can drag and drop evaluations from Otehr Assets tot he Eval panel in the bottom right.
-- (Perhaps “Owners” performing an evaluation can immediately acce[t their own Evals?)
-Evaluations can also be imported, if they are in the .ckl format provided by STIG Viewer to the .xccdf format produced by the SCC tool and other STIG Evaluation tool. Import option is here: (pic). STIG and asset name must match.
 
-“Review” a few rules for this asset, giving them an assortment of Results and Actions.
+ 
+  
+  
+#### Congratulations! You've just Managed some STIGs!
+
