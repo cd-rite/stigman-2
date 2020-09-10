@@ -50,7 +50,7 @@ By default, most users will have the Collection Creator role, allowing them to c
 | Manage       	| Everything in the "Full" level.<br>Can Add/Remove Assets, STIGs, and Users.                                              	|
 | Owner        	| Everything in the "Manage" level.<br>Can Delete the Collection. <br>Responsible for "Accepting" reviews from evaluators. 	|
 
-* Restricted users must be assigned specific STIGs on specific Assets using the "Restrcited User access list..." button in the Grants panel toolbar.
+* Restricted users must be assigned specific STIGs on specific Assets using the "Restricted User access list..." button in the Grants panel toolbar.
 
  [<img src="assets/images/CollectionConfig_Populated.png" alt="drawing" width="600"/>](assets/images/CollectionConfig_Populated.png ':ignore :target=_self')
 
@@ -117,6 +117,6 @@ Status presents an overall summary of evaluations, showing completion statuses a
 
  
   
-  
+
 #### Congratulations! You've just Managed some STIGs!
 
