@@ -8,11 +8,11 @@ Our Project incorporates software developed since 2012 by the [U.S. Naval Unders
 
 ## STIG Manager supports STIG Assessments in Steps 3 and 4 of the RMF Process
 
-Throughout the RMF Process, STIG Manager can serve as single point of truth for users, evaluators, managers, RMF Package reviewers, ISSEs, NQVs, and automated tools for Systems, Assets, attached STIGs, and their current Assessment status. 
+Throughout the RMF Process, STIG Manager can serve as single point of truth for users, evaluators, managers, RMF Package reviewers, ISSEs, NQVs, and automated tools for Systems, Assets, attached STIGs, and their current Assessment status.  By allowing everyone involved in the process to refer to the same set of data and reports, the RMF Process can be executed much more efficiently and it's progress monitored effectively.
 
-STIG Manager provides the data structures, Assessment Workspaces, and Reports described below for managing these portions of the RMF Process.
+STIG Manager provides the data structures, Assessment Workspaces, and Reports described below for managing these portions of the RMF Process.  
 
-#### Collections, Assets, STIGs, and Reviews
+### Collections, Assets, STIGs, and Reviews
 STIG Manager's primary organizational structure is the Collection. A Collection can be created to mirror components of an RMF Package, requirements identified in a Security Assessment Plan, or an entirely different principle that may be more convenient, such as by an organization's Lab or by Asset OS.
 
 Collections are composed of:
@@ -24,16 +24,19 @@ Collections are composed of:
   
 STIG Manager can build and update Collections with your existing artifacts, such as the .ckls produced by STIG Viewer or the automated STIG assessments in XCCDF format produced by the SCC tool, as well as manually from the Collection Configuration tab.  Once a Collection is created in STIG Manager, Users can be granted access to see the current results for each STIG on an Asset, or the whole Collection. Users can see automated tool evaluations, and Rules that still require evaluation. 
 
-#### User Access Controls
+[Collection Video](assets/videos/sc-3.mp4 ':include height=400px controls')
+
+
+### User Access Controls
 STIG Manager provides granular Role-Based Access Controls that can give Users access to some or all of the Assets and their STIGs in a Collection.
 
-#### Workspaces
+### Workspaces
 The STIG Manager Client provides efficient workspaces for creating Collections of Assets and their associated STIGs, and assigning specific Users to evaluate those STIGs. User tasking can be managed in real time by granting Collection roles with varying levels of access, down to individual STIGs on specific Assets. Users have access to efficient STIG Review workspaces that provide resources to guide their evaluations, such as their previous answers for other Assets or whether an automated check is available, as well as allow them to evaluate multiple Assets at once.  Every User gets real time reports and statistics about their progress and the status of their Reviews, scoped to their level of access in each Collection. 
 
-#### Workflow
-STIG Manager supports an "RMF Package Workflow" that allows designated Collection Owners to "return" Reviews to evaluators for further revision or clarification, such as when a Finding requires further Detailing. The Collection Owner can also "Accept" a review, locking it from further revision by evaluators while they prepare their POA&M. 
+### Workflow
+STIG Manager supports an "RMF Package Workflow" that allows designated Collection Owners to "Return" Reviews to evaluators for further revision or clarification, such as when a Finding requires further Detailing. Collection Owners can also "Accept" a Review, locking it from further revision by evaluators while they prepare their POA&M. 
 
-#### Reporting
+### Reporting
 Reports adjust as new STIGs are assigned, results imported, or when new DISA STIG revesions are imported, to provide information on the status and progress of evaluations.
 
 The Collection Configuration workspace provides real-time totals for level of work required as changes to Assets and STIGs are made.
@@ -43,13 +46,13 @@ The Collection Configuration workspace provides real-time totals for level of wo
 ## Getting Started with STIG Manager
 
 ### QuickStart User Walkthrough
-A quick walkthrough to help users get started evaluating STIGs.
+[A quick walkthrough to familiarize Users with STIG Manager and help them get started evaluating STIGs.](Quickstart_Guide.md)
 
 ### QuickStart Admin Walkthrough
 A quick walkthrough aimed at Administrators of STIG Manager.
 
 ### Terminology used in STIG Manager
-An explanation of the [Terms and concepts](terminology.md?id=terminology-and-concepts-used-in-stig-manager) used in STIG Manager.
+An explanation of the [Terms and concepts](terminology.md) used in STIG Manager.
 
 ### Contribution Guide
 

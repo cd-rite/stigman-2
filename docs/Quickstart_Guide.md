@@ -15,6 +15,7 @@ Collections are composed of:
 
 ## The Navigation Tree
 
+The Nav Tree is located in STIG Managers leftmost panel, and provides Users access to their assigned Collections, Assets, STIGs, Reviews, and Reports. For Users with the appropriate Privileges and Grants, Administrative and Configuration functions are also available.
 
 ## Create your first Collection
 

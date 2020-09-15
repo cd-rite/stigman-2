@@ -6,6 +6,4 @@
 * [Use Case](Use_Case.md "A Use Case")
 * [Roadmap](roadmap.md "A Roadmap")
 * [FAQ](FAQ.md "An FAQ!")
-* [Role Access](Role_Access.md "RBAC description")
-* [Environment Variables](Role_Access.md "RBAC description")
 * [Docker Docs](Docker.md "Run the STIG Manager container")
