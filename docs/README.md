@@ -45,6 +45,8 @@ STIG Manager provides granular Role-Based Access Controls that can give Users ac
 ### STIG Manager is CCI-aware
 STIG Manager maintains relationships between STIG Rules and their associated CCIs and Assessment Procedures. Reports can be pivoted to show Assessments sorted by Rule, CCI, or Group.
 
+STIG Manager can produce a pre-populated POA&M-like document that lists findings already decomposed into their related CCIs. 
+
 
 ### STIG Manager integrates with the RMF Lifecycle approach
 STIG Manager is (almost) ready to support a life-cycle approach to RMF. With the implementation of the "Continuous" Workflow, STIG Manager will play a vital part of the RMF lifecycle.  When new STIGs are released, systems or the SAP changes, or new STIGs are applied, only the new content needs to be asessed.  STIG Manager timestamps every review, to help determine compliance with the Continuous Evaluation approach.
